@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+import getpass
+import os
+import shutil
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+
+APP_TITLE = "Kylin Space Guard"
+METRICS = [
+    ("root_used", "Root Used"),
+    ("kaiming", "Kaiming"),
+    ("ostree_upper", "ostree Upper"),
+    ("kare_upper", "KARE Upper"),
+]
+
+
+def project_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def helper_path() -> Path:
+    return project_root() / "bin" / "kylin-space-guard"
+
+
+def run_capture(command):
+    return subprocess.run(
+        [str(x) for x in command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+    )
+
+
+def du_bytes(paths):
+    total = 0
+    for pattern in paths:
+        proc = subprocess.run(
+            ["bash", "-lc", f"du -sx {pattern} 2>/dev/null | awk '{{s += $1}} END {{print s + 0}}'"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        try:
+            total += int(proc.stdout.strip() or "0") * 1024
+        except ValueError:
+            pass
+    return total
+
+
+def root_used_bytes():
+    usage = shutil.disk_usage("/")
+    return usage.used
+
+
+def current_metrics():
+    return {
+        "root_used": root_used_bytes(),
+        "kaiming": du_bytes(["/var/opt/kaiming"]),
+        "ostree_upper": du_bytes(
+            [
+                "/sysroot/ostree/pkgs/*/*-ovl/*-upper",
+                "/sysroot/ostree/pkgs/*/*-ovl/*-tmpupper",
+            ]
+        ),
+        "kare_upper": du_bytes(
+            [
+                "/opt/kare-applications/*/upper",
+                "/opt/kare-applications/*/work",
+            ]
+        ),
+    }
+
+
+def fmt_size(value):
+    if value is None:
+        return "-"
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    size = float(max(value, 0))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TiB"
+
+
+class SpaceGuardWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(title=APP_TITLE)
+        self.set_default_size(920, 680)
+        self.set_border_width(12)
+        self.user = os.environ.get("SUDO_USER") or getpass.getuser()
+        self.helper = helper_path()
+        self.baseline = None
+        self.current = None
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.add(root)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        root.pack_start(header, False, False, 0)
+
+        title = Gtk.Label()
+        title.set_markup("<b>Kylin Space Guard</b>")
+        title.set_xalign(0)
+        header.pack_start(title, True, True, 0)
+
+        header.pack_start(Gtk.Label(label="User:"), False, False, 0)
+        self.user_entry = Gtk.Entry()
+        self.user_entry.set_text(self.user)
+        self.user_entry.set_width_chars(16)
+        header.pack_start(self.user_entry, False, False, 0)
+
+        self.summary = Gtk.Label()
+        self.summary.set_xalign(0)
+        self.summary.set_line_wrap(True)
+        self.summary.set_text("Scan first. Privileged actions require Polkit and Kylin maintain mode.")
+        root.pack_start(self.summary, False, False, 0)
+
+        self.metric_grid = Gtk.Grid()
+        self.metric_grid.set_column_spacing(18)
+        self.metric_grid.set_row_spacing(8)
+        root.pack_start(self.metric_grid, False, False, 0)
+        self.metric_labels = {}
+        headers = ["Area", "Before", "Released", "Current"]
+        for col, text in enumerate(headers):
+            label = Gtk.Label()
+            label.set_markup(f"<b>{text}</b>")
+            label.set_xalign(0)
+            self.metric_grid.attach(label, col, 0, 1, 1)
+        for row, (key, name) in enumerate(METRICS, start=1):
+            name_label = Gtk.Label(label=name)
+            name_label.set_xalign(0)
+            self.metric_grid.attach(name_label, 0, row, 1, 1)
+            self.metric_labels[key] = {}
+            for col, field in enumerate(("before", "released", "current"), start=1):
+                value = Gtk.Label(label="-")
+                value.set_xalign(0)
+                value.set_width_chars(14)
+                self.metric_labels[key][field] = value
+                self.metric_grid.attach(value, col, row, 1, 1)
+
+        action_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        root.pack_start(action_bar, False, False, 0)
+
+        self.scan_button = Gtk.Button(label="Scan")
+        self.scan_button.connect("clicked", lambda _b: self.scan())
+        action_bar.pack_start(self.scan_button, False, False, 0)
+
+        self.disable_autostart_button = Gtk.Button(label="Disable Autostart")
+        self.disable_autostart_button.connect(
+            "clicked", lambda _b: self.apply_action("--disable-kaiming-autostart")
+        )
+        action_bar.pack_start(self.disable_autostart_button, False, False, 0)
+
+        self.quarantine_button = Gtk.Button(label="Quarantine Orphans")
+        self.quarantine_button.connect(
+            "clicked", lambda _b: self.apply_action("--quarantine-orphan-kaiming-layers")
+        )
+        action_bar.pack_start(self.quarantine_button, False, False, 0)
+
+        self.monitor_button = Gtk.Button(label="Install Monitor")
+        self.monitor_button.connect("clicked", lambda _b: self.apply_action("--install-monitor"))
+        action_bar.pack_start(self.monitor_button, False, False, 0)
+
+        uninstall_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        root.pack_start(uninstall_box, False, False, 0)
+        uninstall_box.pack_start(Gtk.Label(label="App ID:"), False, False, 0)
+        self.app_entry = Gtk.Entry()
+        self.app_entry.set_placeholder_text("org.mozilla.net.mozilla.firefox")
+        uninstall_box.pack_start(self.app_entry, True, True, 0)
+        uninstall_button = Gtk.Button(label="Uninstall App")
+        uninstall_button.connect("clicked", lambda _b: self.uninstall_app())
+        uninstall_box.pack_start(uninstall_button, False, False, 0)
+
+        self.status = Gtk.Label(label="Ready")
+        self.status.set_xalign(0)
+        root.pack_start(self.status, False, False, 0)
+
+        expander = Gtk.Expander(label="Details")
+        expander.set_expanded(False)
+        root.pack_start(expander, True, True, 0)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_hexpand(True)
+        scrolled.set_vexpand(True)
+        expander.add(scrolled)
+
+        self.output = Gtk.TextView()
+        self.output.set_editable(False)
+        self.output.set_monospace(True)
+        self.output.set_wrap_mode(Gtk.WrapMode.NONE)
+        scrolled.add(self.output)
+
+        self.scan()
+
+    def append_output(self, text):
+        buf = self.output.get_buffer()
+        end = buf.get_end_iter()
+        buf.insert(end, text)
+        mark = buf.create_mark(None, buf.get_end_iter(), False)
+        self.output.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+
+    def set_output(self, text):
+        self.output.get_buffer().set_text(text)
+
+    def update_metrics(self, baseline, current):
+        self.baseline = baseline
+        self.current = current
+        total_released = 0
+        for key, _name in METRICS:
+            before = baseline.get(key)
+            now = current.get(key)
+            released = max(before - now, 0)
+            total_released += released if key != "root_used" else 0
+            self.metric_labels[key]["before"].set_text(fmt_size(before))
+            self.metric_labels[key]["released"].set_text(fmt_size(released))
+            self.metric_labels[key]["current"].set_text(fmt_size(now))
+        self.summary.set_text(
+            f"Before: Kaiming {fmt_size(baseline.get('kaiming'))}, "
+            f"ostree upper {fmt_size(baseline.get('ostree_upper'))}, "
+            f"KARE upper {fmt_size(baseline.get('kare_upper'))}. "
+            f"Released by last action: {fmt_size(total_released)}."
+        )
+
+    def set_busy(self, busy, message):
+        self.status.set_text(message)
+        for button in (
+            self.scan_button,
+            self.disable_autostart_button,
+            self.quarantine_button,
+            self.monitor_button,
+        ):
+            button.set_sensitive(not busy)
+
+    def base_args(self):
+        user = self.user_entry.get_text().strip() or self.user
+        return [self.helper, "--user", user]
+
+    def scan(self):
+        self.set_output("")
+        self.set_busy(True, "Scanning...")
+
+        def worker():
+            before = current_metrics()
+            proc = run_capture(self.base_args() + ["--dry-run"])
+            after = current_metrics()
+            GLib.idle_add(self.update_metrics, before, after)
+            GLib.idle_add(self.append_output, proc.stdout)
+            GLib.idle_add(self.set_busy, False, f"Scan finished with exit code {proc.returncode}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def run_apply(self, action_args, action_label):
+        self.set_output("")
+        self.set_busy(True, f"Running {action_label}...")
+
+        def worker():
+            before = current_metrics()
+            command = ["pkexec"] + self.base_args() + ["--apply"] + action_args
+            proc = run_capture(command)
+            after = current_metrics()
+            GLib.idle_add(self.update_metrics, before, after)
+            GLib.idle_add(self.append_output, proc.stdout)
+            GLib.idle_add(
+                self.set_busy,
+                False,
+                f"{action_label} finished with exit code {proc.returncode}",
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def apply_action(self, action):
+        if not self.confirm_apply(action):
+            return
+        self.run_apply([action], action)
+
+    def uninstall_app(self):
+        app_id = self.app_entry.get_text().strip()
+        if not app_id:
+            self.message("Missing app id", "Enter a Kaiming application ID first.")
+            return
+        if not self.confirm_apply(f"--uninstall-kaiming-app {app_id}"):
+            return
+        self.run_apply(["--uninstall-kaiming-app", app_id], f"uninstall {app_id}")
+
+    def confirm_apply(self, action):
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text="Apply this action?",
+        )
+        dialog.format_secondary_text(
+            f"{action}\n\n"
+            "The app records space before and after the action. It requests Polkit "
+            "authorization and the helper refuses to edit boot files, ostree "
+            "deployments, fstab, or partitions."
+        )
+        response = dialog.run()
+        dialog.destroy()
+        return response == Gtk.ResponseType.OK
+
+    def message(self, title, body):
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            flags=0,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text=title,
+        )
+        dialog.format_secondary_text(body)
+        dialog.run()
+        dialog.destroy()
+
+
+def main():
+    helper = helper_path()
+    if not helper.exists():
+        print(f"helper not found: {helper}", file=sys.stderr)
+        return 1
+    win = SpaceGuardWindow()
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

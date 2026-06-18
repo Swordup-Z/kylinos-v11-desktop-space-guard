@@ -1,0 +1,440 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_NAME=${0##*/}
+APPLY=0
+TARGET_USER=${SUDO_USER:-${USER:-}}
+TARGET_HOME=""
+THRESHOLD_GB=10
+INSTALL_MONITOR=0
+DISABLE_KAIMING_AUTOSTART=0
+QUARANTINE_ORPHAN_KAIMING_LAYERS=0
+UNINSTALL_ALL_KAIMING_APPS=0
+declare -a UNINSTALL_KAIMING_APPS=()
+
+KAIMING_BIN=/opt/kaiming-tools/bin/kaiming
+REPORT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+QUARANTINE_ROOT_BASE=/data/usershare/kylinos-system-rollbacks/storage/kaiming-orphan-layers
+
+usage() {
+  cat <<EOF
+Usage:
+  $SCRIPT_NAME [--dry-run] [--apply] [--user USER] [actions...]
+
+Default action is a read-only report. Apply mode requires root and Kylin
+maintain mode for system-level changes.
+
+Actions:
+  --disable-kaiming-autostart
+      Create user-level Hidden=true overrides for known Kaiming/KARE preheat
+      or silent autostart desktop entries.
+
+  --uninstall-kaiming-app APPID
+      Uninstall one Kaiming application through the official kaiming command.
+      Can be passed multiple times. User data is kept.
+
+  --uninstall-all-kaiming-apps
+      Uninstall all installed Kaiming applications except base/runtime layers.
+      User data is kept. This is useful when Kaiming apps are not needed.
+
+  --quarantine-orphan-kaiming-layers
+      Move non-current Kaiming version directories to a DATA rollback
+      quarantine. This only acts on extra version directories not listed by
+      'kaiming list'. Current systems often have no such orphan layers.
+
+  --install-monitor
+      Install a systemd timer that writes periodic reports to
+      /var/log/kylin-space-guard.log. It does not clean automatically.
+
+Options:
+  --threshold-gb N
+      Warn when Kaiming layers or ostree upper layers exceed N GiB.
+
+Examples:
+  $SCRIPT_NAME --dry-run --user zengjianqi
+  sudo $SCRIPT_NAME --apply --user zengjianqi --disable-kaiming-autostart
+  sudo $SCRIPT_NAME --apply --user zengjianqi --uninstall-kaiming-app org.mozilla.net.mozilla.firefox
+  sudo $SCRIPT_NAME --apply --user zengjianqi --install-monitor
+
+Safety model:
+  - Never deletes /ostree, /sysroot/ostree, /boot, EFI files, or deployments.
+  - Never rewrites GRUB, loader entries, fstab, or partition tables.
+  - Uses kaiming uninstall for installed Kaiming applications.
+  - Moves only clearly non-current Kaiming version directories when explicitly
+    requested, and keeps them under DATA for rollback.
+EOF
+}
+
+log() {
+  printf '%s\n' "$*"
+}
+
+warn() {
+  printf 'WARN: %s\n' "$*" >&2
+}
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+search_recursive() {
+  local pattern=$1
+  shift
+  if have_cmd rg; then
+    rg -n "$pattern" "$@" 2>/dev/null || true
+  else
+    grep -RInE "$pattern" "$@" 2>/dev/null || true
+  fi
+}
+
+strip_ansi() {
+  sed -r 's/\x1B\[[0-9;]*[mK]//g'
+}
+
+run_cmd() {
+  if (( APPLY )); then
+    log "+ $*"
+    "$@"
+  else
+    log "[dry-run] $*"
+  fi
+}
+
+require_apply_preconditions() {
+  if (( ! APPLY )); then
+    return
+  fi
+  [[ $(id -u) -eq 0 ]] || die "--apply must run as root"
+  have_cmd mm-cli || die "mm-cli not found; cannot verify Kylin maintain mode"
+
+  local mode
+  mode=$(mm-cli -s 2>&1 || true)
+  log "mm-cli -s: $mode"
+  if ! grep -qi 'maintain' <<<"$mode"; then
+    die "system is not in maintain mode; run 'sudo mm-cli -o', reboot, then rerun"
+  fi
+}
+
+resolve_user() {
+  if [[ -z "$TARGET_USER" || "$TARGET_USER" == root ]]; then
+    TARGET_USER=$(logname 2>/dev/null || true)
+  fi
+  [[ -n "$TARGET_USER" && "$TARGET_USER" != root ]] || die "cannot determine desktop user; pass --user USER"
+
+  TARGET_HOME=$(getent passwd "$TARGET_USER" | awk -F: '{print $6}')
+  [[ -n "$TARGET_HOME" && -d "$TARGET_HOME" ]] || die "cannot determine home for $TARGET_USER"
+}
+
+to_gib_int() {
+  local path=$1
+  local kib=0
+  kib=$(du -sx "$path" 2>/dev/null | awk '{print $1}' || true)
+  [[ -n "$kib" ]] || kib=0
+  awk -v kib="$kib" 'BEGIN { printf "%.0f", kib / 1024 / 1024 }'
+}
+
+print_header() {
+  log
+  log "== $* =="
+}
+
+kaiming_installed_refs() {
+  [[ -x "$KAIMING_BIN" ]] || return 0
+  "$KAIMING_BIN" list 2>/dev/null |
+    strip_ansi |
+    awk '
+      NF < 3 { next }
+      $1 == "标识" || $1 == "E:" { next }
+      $1 ~ /^[A-Za-z0-9_.-]+$/ { print $1, $3 }
+    '
+}
+
+kaiming_app_refs() {
+  kaiming_installed_refs | awk '$1 !~ /^top\.openkylin\.(base|ukui)$/ { print $1 }'
+}
+
+report_storage() {
+  print_header "filesystem"
+  df -hT / /home "$TARGET_HOME" /data /sysroot /var 2>/dev/null || true
+
+  print_header "overlay mounts"
+  findmnt -t overlay -o TARGET,SIZE,USED,AVAIL,USE%,OPTIONS 2>/dev/null || true
+
+  print_header "true overlay upper usage"
+  du -sh \
+    /sysroot/ostree/pkgs/*/*-ovl/*-upper \
+    /sysroot/ostree/pkgs/*/*-ovl/*-tmpupper \
+    /opt/kare-applications/*/upper \
+    /opt/kare-applications/*/work \
+    2>/dev/null | sort -h || true
+
+  local ostree_upper_gb kaiming_gb
+  ostree_upper_gb=$(to_gib_int /sysroot/ostree/pkgs)
+  kaiming_gb=$(to_gib_int /var/opt/kaiming)
+  (( ostree_upper_gb > THRESHOLD_GB )) && warn "ostree package overlay area is ${ostree_upper_gb}GiB"
+  (( kaiming_gb > THRESHOLD_GB )) && warn "Kaiming data is ${kaiming_gb}GiB"
+}
+
+report_boot_risk() {
+  print_header "boot and duplicate SYSROOT risk"
+  printf 'cmdline: '
+  cat /proc/cmdline 2>/dev/null || true
+  lsblk -o NAME,PATH,SIZE,FSTYPE,LABEL,UUID,PARTUUID,MOUNTPOINTS 2>/dev/null |
+    awk 'NR == 1 || /SYSROOT|SYSBOOT|ESP|SWAP|DATA/'
+
+  local current_root old_refs
+  current_root=$(findmnt -n -o UUID / 2>/dev/null || true)
+  old_refs=$(search_recursive 'root=UUID=|search(_fs_uuid|\.fs_uuid)|ostree=' /boot /boot/efi)
+  if [[ -n "$old_refs" ]]; then
+    log "$old_refs" | sed -n '1,80p'
+    if [[ -n "$current_root" ]] && grep -q 'root=UUID=' <<<"$old_refs" &&
+       grep -v "$current_root" <<<"$old_refs" | grep -q 'root=UUID='; then
+      warn "boot files reference root UUIDs other than current root UUID $current_root; verify active EFI path before any boot repair"
+    fi
+  fi
+}
+
+report_kaiming() {
+  print_header "kaiming inventory"
+  if [[ ! -x "$KAIMING_BIN" ]]; then
+    log "Kaiming command not found at $KAIMING_BIN"
+    return
+  fi
+
+  "$KAIMING_BIN" list 2>&1 || true
+
+  print_header "kaiming size by layer"
+  du -sh /var/opt/kaiming/layers/stable/*/*/*/*/* 2>/dev/null | sort -h || true
+
+  print_header "kaiming upgradable"
+  "$KAIMING_BIN" update --upgradable 2>&1 || true
+
+  print_header "kaiming version directories"
+  find /var/opt/kaiming/layers/stable -mindepth 5 -maxdepth 5 -type d -printf '%p\n' 2>/dev/null |
+    sort || true
+}
+
+report_autostart() {
+  print_header "kaiming/kare autostart and services"
+  search_recursive 'kaiming|kare' \
+    /etc/xdg/autostart /usr/etc/xdg/autostart "$TARGET_HOME/.config/autostart" \
+    /etc/systemd /usr/etc/systemd /usr/lib/systemd /lib/systemd \
+    | sed -n '1,140p' || true
+
+  systemctl list-unit-files --no-pager 2>/dev/null | grep -Ei 'kaiming|kare' || true
+  systemctl --user list-unit-files --no-pager 2>/dev/null | grep -Ei 'kaiming|kare' || true
+}
+
+disable_user_autostart() {
+  local dest_dir="$TARGET_HOME/.config/autostart"
+  local entries=(
+    kylin-note_autoStart.desktop
+    qaxbrowser-safe-preheat.desktop
+    dbus-daemon-proxy.desktop
+  )
+  run_cmd install -d -m 0755 -o "$TARGET_USER" -g "$TARGET_USER" "$dest_dir"
+
+  local entry dest
+  for entry in "${entries[@]}"; do
+    dest="$dest_dir/$entry"
+    if (( APPLY )); then
+      {
+        printf '[Desktop Entry]\n'
+        printf 'Type=Application\n'
+        printf 'Name=%s\n' "$entry"
+        printf 'Hidden=true\n'
+      } >"$dest"
+      chown "$TARGET_USER:$TARGET_USER" "$dest"
+      chmod 0644 "$dest"
+      log "+ hide autostart $entry for $TARGET_USER"
+    else
+      log "[dry-run] create $dest with Hidden=true"
+    fi
+  done
+}
+
+uninstall_kaiming_refs() {
+  [[ -x "$KAIMING_BIN" ]] || die "Kaiming command not found"
+  local refs=("$@")
+  local ref
+  for ref in "${refs[@]}"; do
+    [[ -n "$ref" ]] || continue
+    run_cmd "$KAIMING_BIN" kill "$ref"
+    run_cmd "$KAIMING_BIN" uninstall -y "$ref"
+  done
+}
+
+collect_all_kaiming_apps() {
+  mapfile -t UNINSTALL_KAIMING_APPS < <(kaiming_app_refs)
+}
+
+quarantine_orphan_kaiming_layers() {
+  [[ -x "$KAIMING_BIN" ]] || die "Kaiming command not found"
+
+  local qroot="$QUARANTINE_ROOT_BASE/$(date '+%Y%m%d-%H%M%S')"
+  declare -A current=()
+  local ref version
+  while read -r ref version; do
+    [[ -n "$ref" && -n "$version" ]] || continue
+    current["$ref|$version"]=1
+  done < <(kaiming_installed_refs)
+
+  local layer id version_dir version_name rel dest
+  local moved=0
+  while IFS= read -r layer; do
+    version_name=${layer##*/}
+    id=$(basename "$(dirname "$(dirname "$layer")")")
+    [[ -n "$id" && -n "$version_name" ]] || continue
+    if [[ -n "${current["$id|$version_name"]:-}" ]]; then
+      continue
+    fi
+    if grep -RFl -- "$layer" /proc/*/mountinfo >/dev/null 2>&1; then
+      warn "skip mounted/in-use orphan candidate: $layer"
+      continue
+    fi
+    rel=${layer#/var/opt/kaiming/layers/}
+    dest="$qroot/$rel"
+    if (( APPLY )); then
+      install -d -m 0755 "$(dirname "$dest")"
+      log "+ quarantine $layer -> $dest"
+      mv "$layer" "$dest"
+    else
+      log "[dry-run] quarantine $layer -> $dest"
+    fi
+    moved=$((moved + 1))
+  done < <(find /var/opt/kaiming/layers/stable -mindepth 5 -maxdepth 5 -type d -printf '%p\n' 2>/dev/null | sort)
+
+  if (( moved == 0 )); then
+    log "No non-current Kaiming version directories found."
+  fi
+}
+
+install_monitor() {
+  local script_path=/usr/local/sbin/kylin-space-guard
+  local service=/etc/systemd/system/kylin-space-guard.service
+  local timer=/etc/systemd/system/kylin-space-guard.timer
+
+  run_cmd install -m 0755 "$0" "$script_path"
+  if (( APPLY )); then
+    cat >"$service" <<EOF
+[Unit]
+Description=Kylin space guard report
+
+[Service]
+Type=oneshot
+ExecStart=$script_path --dry-run --user $TARGET_USER
+StandardOutput=append:/var/log/kylin-space-guard.log
+StandardError=append:/var/log/kylin-space-guard.log
+EOF
+    cat >"$timer" <<'EOF'
+[Unit]
+Description=Run Kylin space guard report weekly
+
+[Timer]
+OnBootSec=10min
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now kylin-space-guard.timer
+    log "+ installed kylin-space-guard.timer"
+  else
+    log "[dry-run] write $service and $timer, then enable timer"
+  fi
+}
+
+while (($#)); do
+  case "$1" in
+    --dry-run|--report)
+      APPLY=0
+      ;;
+    --apply)
+      APPLY=1
+      ;;
+    --user)
+      shift
+      [[ $# -gt 0 ]] || die "--user requires a value"
+      TARGET_USER=$1
+      ;;
+    --threshold-gb)
+      shift
+      [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]] || die "--threshold-gb requires an integer"
+      THRESHOLD_GB=$1
+      ;;
+    --disable-kaiming-autostart)
+      DISABLE_KAIMING_AUTOSTART=1
+      ;;
+    --uninstall-kaiming-app)
+      shift
+      [[ $# -gt 0 ]] || die "--uninstall-kaiming-app requires an APPID"
+      UNINSTALL_KAIMING_APPS+=("$1")
+      ;;
+    --uninstall-all-kaiming-apps)
+      UNINSTALL_ALL_KAIMING_APPS=1
+      ;;
+    --quarantine-orphan-kaiming-layers)
+      QUARANTINE_ORPHAN_KAIMING_LAYERS=1
+      ;;
+    --install-monitor)
+      INSTALL_MONITOR=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown argument: $1"
+      ;;
+  esac
+  shift
+done
+
+resolve_user
+require_apply_preconditions
+
+log "Kylin space guard report time: $REPORT_TIME"
+log "target user: $TARGET_USER"
+log "mode: $([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
+
+report_storage
+report_boot_risk
+report_kaiming
+report_autostart
+
+if (( UNINSTALL_ALL_KAIMING_APPS )); then
+  collect_all_kaiming_apps
+fi
+
+if ((${#UNINSTALL_KAIMING_APPS[@]})); then
+  print_header "action: uninstall kaiming apps"
+  uninstall_kaiming_refs "${UNINSTALL_KAIMING_APPS[@]}"
+fi
+
+if (( QUARANTINE_ORPHAN_KAIMING_LAYERS )); then
+  print_header "action: quarantine orphan kaiming layers"
+  quarantine_orphan_kaiming_layers
+fi
+
+if (( DISABLE_KAIMING_AUTOSTART )); then
+  print_header "action: disable kaiming autostart"
+  disable_user_autostart
+fi
+
+if (( INSTALL_MONITOR )); then
+  print_header "action: install monitor"
+  install_monitor
+fi
+
+print_header "summary"
+log "No ostree deployment, EFI, GRUB, fstab, or partition table changes were made by this tool."
+if (( ! APPLY )); then
+  log "This was a dry run. Rerun with --apply for selected actions."
+fi
