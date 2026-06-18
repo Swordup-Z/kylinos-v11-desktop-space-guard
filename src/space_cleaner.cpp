@@ -82,38 +82,39 @@ protected:
 
         const QRectF card(1, 1, width() - 2, height() - 2);
         QLinearGradient bg(card.topLeft(), card.bottomRight());
-        bg.setColorAt(0.00, QColor(255, 255, 255, 178));
-        bg.setColorAt(0.54, QColor(244, 241, 234, 132));
-        bg.setColorAt(1.00, QColor(228, 224, 214, 92));
-        painter.setPen(QPen(QColor(255, 255, 255, 135), 1));
+        bg.setColorAt(0.00, QColor(255, 255, 255, 210));
+        bg.setColorAt(0.54, QColor(247, 249, 252, 178));
+        bg.setColorAt(1.00, QColor(233, 238, 244, 132));
+        painter.setPen(QPen(QColor(255, 255, 255, 168), 1));
         painter.setBrush(bg);
         painter.drawRoundedRect(card, 8, 8);
 
         QRadialGradient wash(QPointF(58, 58), 62);
-        wash.setColorAt(0.00, QColor(39, 44, 56, 34));
-        wash.setColorAt(0.62, QColor(88, 83, 73, 16));
-        wash.setColorAt(1.00, QColor(39, 44, 56, 0));
+        wash.setColorAt(0.00, QColor(18, 22, 30, 42));
+        wash.setColorAt(0.58, QColor(72, 82, 95, 18));
+        wash.setColorAt(1.00, QColor(18, 22, 30, 0));
         painter.setPen(Qt::NoPen);
         painter.setBrush(wash);
         painter.drawEllipse(QPointF(58, 58), 62, 38);
 
-        QRadialGradient goldWash(QPointF(155, 60), 58);
-        goldWash.setColorAt(0.00, QColor(158, 132, 72, 42 + static_cast<int>(24 * activity_)));
-        goldWash.setColorAt(0.68, QColor(158, 132, 72, 12));
-        goldWash.setColorAt(1.00, QColor(158, 132, 72, 0));
-        painter.setBrush(goldWash);
+        QRadialGradient mistWash(QPointF(155, 60), 58);
+        mistWash.setColorAt(0.00, QColor(98, 118, 138, 38 + static_cast<int>(26 * activity_)));
+        mistWash.setColorAt(0.66, QColor(98, 118, 138, 12));
+        mistWash.setColorAt(1.00, QColor(98, 118, 138, 0));
+        painter.setBrush(mistWash);
         painter.drawEllipse(QPointF(155, 60), 58, 38);
 
-        const QColor ink(43, 48, 59);
-        const QColor stone(108, 105, 97);
-        const QColor warmGold(159, 132, 73);
+        const QColor ink(28, 31, 36);
+        const QColor graphite(66, 72, 82);
+        const QColor mist(103, 121, 139);
+        const QColor silver(157, 168, 181);
 
         for (int i = 0; i < 3; ++i) {
             const QRectF layer(26 + i * 7, 31 + i * 16, 62, 14);
             painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 90 - i * 18), 1));
-            painter.setBrush(QColor(255, 255, 255, 118 - i * 12));
+            painter.setBrush(QColor(255, 255, 255, 138 - i * 14));
             painter.drawRoundedRect(layer, 7, 7);
-            painter.setPen(QPen(QColor(stone.red(), stone.green(), stone.blue(), 54), 1));
+            painter.setPen(QPen(QColor(graphite.red(), graphite.green(), graphite.blue(), 54), 1));
             painter.drawLine(layer.left() + 11, layer.center().y(), layer.right() - 12, layer.center().y());
         }
 
@@ -121,7 +122,7 @@ protected:
         flow.moveTo(83, 58);
         flow.cubicTo(105, 30, 132, 86, 154, 58);
         flow.cubicTo(166, 43, 178, 47, 188, 57);
-        painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 52 + static_cast<int>(78 * activity_)),
+        painter.setPen(QPen(QColor(mist.red(), mist.green(), mist.blue(), 58 + static_cast<int>(86 * activity_)),
                             2.4 + activity_ * 1.1,
                             Qt::SolidLine,
                             Qt::RoundCap));
@@ -132,7 +133,7 @@ protected:
             const qreal x = 86 + t * 98;
             const qreal y = 58 + std::sin((t * 2.0 + phase_) * 3.14159265359) * 12;
             const int alpha = 42 + static_cast<int>(118 * activity_);
-            const QColor dot = i % 2 ? warmGold : ink;
+            const QColor dot = i % 2 ? silver : ink;
             painter.setBrush(QColor(dot.red(), dot.green(), dot.blue(), alpha));
             painter.setPen(Qt::NoPen);
             painter.drawEllipse(QPointF(x, y), 1.8 + activity_ * 1.6, 1.8 + activity_ * 1.6);
@@ -143,7 +144,7 @@ protected:
         const qreal quietPulse = 0.5 + 0.5 * std::sin(phase_ * 6.28318530718);
         painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 44), 7, Qt::SolidLine, Qt::RoundCap));
         painter.drawArc(outer, 40 * 16, 285 * 16);
-        painter.setPen(QPen(QColor(warmGold.red(), warmGold.green(), warmGold.blue(),
+        painter.setPen(QPen(QColor(mist.red(), mist.green(), mist.blue(),
                                    126 + static_cast<int>(70 * activity_)),
                             7,
                             Qt::SolidLine,
@@ -161,7 +162,7 @@ protected:
 
         painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 32), 1));
         painter.drawLine(QPointF(116, 94), QPointF(190, 94));
-        painter.setPen(QPen(QColor(warmGold.red(), warmGold.green(), warmGold.blue(), 112), 1.4));
+        painter.setPen(QPen(QColor(mist.red(), mist.green(), mist.blue(), 126), 1.4));
         const qreal x = 116 + std::fmod(phase_ * 96, 74.0);
         painter.drawLine(QPointF(x, 94), QPointF(x + 18, 94));
     }
@@ -437,46 +438,46 @@ private:
         root->addWidget(plan_, 1);
 
         setStyleSheet(QStringLiteral(R"(
-            QWidget#AppRoot { background: #f4f2ec; color: #262a31; }
+            QWidget#AppRoot { background: #f5f7fa; color: #1d1d1f; }
             QFrame#HeaderFrame {
                 border-radius: 8px;
-                border: 1px solid #d8d1c2;
+                border: 1px solid #d9dfe7;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #fbfaf6, stop:0.56 #efe9dc, stop:1 #e8ece8);
+                    stop:0 #ffffff, stop:0.56 #f5f7fa, stop:1 #edf2f7);
             }
-            QLabel#Title { color: #252a31; letter-spacing: 0px; }
-            QFrame#HeaderFrame QLabel { color: #42464d; }
-            QLabel#Intro { color: #5d5f5c; font-size: 14px; line-height: 150%; }
+            QLabel#Title { color: #1d1d1f; letter-spacing: 0px; }
+            QFrame#HeaderFrame QLabel { color: #3a3d42; }
+            QLabel#Intro { color: #63666d; font-size: 14px; line-height: 150%; }
             QFrame#StatusFrame {
-                border: 1px solid #d8d1c2;
+                border: 1px solid #d9dfe7;
                 border-radius: 8px;
-                background: rgba(255, 255, 255, 165);
+                background: #ffffff;
             }
-            QLabel#StatusTitle { color: #2f3440; font-weight: 700; }
-            QLabel#StatusSummary { color: #252a31; font-weight: 600; }
-            QLabel#LastUpdate { color: #77736a; }
+            QLabel#StatusTitle { color: #1d1d1f; font-weight: 700; }
+            QLabel#StatusSummary { color: #24262b; font-weight: 600; }
+            QLabel#LastUpdate { color: #737780; }
             QProgressBar#Progress {
-                border: 1px solid #cdc4b2;
+                border: 1px solid #cbd3dd;
                 border-radius: 6px;
-                background: #ece7dc;
+                background: #eef2f6;
                 min-height: 10px;
                 max-height: 10px;
             }
             QProgressBar#Progress::chunk {
                 border-radius: 6px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #303642, stop:1 #9f8449);
+                    stop:0 #1d1d1f, stop:1 #66798b);
             }
             QTableWidget#MetricsTable, QTableWidget#PlanTable {
-                border: 1px solid #d8d1c2;
+                border: 1px solid #d9dfe7;
                 border-radius: 8px;
-                background: #fffefa;
-                alternate-background-color: #f7f3eb;
-                selection-background-color: #ded6c7;
+                background: #ffffff;
+                alternate-background-color: #f7f9fb;
+                selection-background-color: #dce5ee;
             }
             QHeaderView::section {
-                background: #e8e1d3;
-                color: #383d45;
+                background: #edf1f5;
+                color: #343941;
                 border: 0;
                 padding: 8px;
                 font-weight: 700;
@@ -485,23 +486,23 @@ private:
                 min-height: 34px;
                 padding: 0 16px;
                 border-radius: 7px;
-                border: 1px solid #c9c0ae;
-                background: #fffefa;
-                color: #252a31;
+                border: 1px solid #cbd3dd;
+                background: #ffffff;
+                color: #1d1d1f;
                 font-weight: 600;
             }
-            QPushButton:hover { background: #f6f0e4; border-color: #a99468; }
-            QPushButton:pressed { background: #e8dfd0; }
+            QPushButton:hover { background: #f1f5f9; border-color: #9fb0c2; }
+            QPushButton:pressed { background: #e3eaf2; }
             QPushButton#PrimaryButton {
-                color: #fffefa;
-                border: 1px solid #2d323c;
-                background: #303642;
+                color: #ffffff;
+                border: 1px solid #1d1d1f;
+                background: #1d1d1f;
             }
-            QPushButton#PrimaryButton:hover { background: #444a55; }
+            QPushButton#PrimaryButton:hover { background: #343941; }
             QPushButton:disabled {
-                color: #a6a098;
-                background: #ece7dc;
-                border-color: #d6d0c3;
+                color: #a4a9b1;
+                background: #eef2f6;
+                border-color: #d9dfe7;
             }
         )"));
     }
