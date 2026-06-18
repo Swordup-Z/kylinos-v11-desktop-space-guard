@@ -11,6 +11,7 @@
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -386,6 +387,93 @@ private:
     QPropertyAnimation *pressAnimation_ = nullptr;
 };
 
+class RowHighlightTable : public QTableWidget {
+    Q_OBJECT
+    Q_PROPERTY(qreal rowGlow READ rowGlow WRITE setRowGlow)
+
+public:
+    explicit RowHighlightTable(int rows, int columns, QWidget *parent = nullptr)
+        : QTableWidget(rows, columns, parent)
+    {
+        setMouseTracking(true);
+        viewport()->setMouseTracking(true);
+        glowAnimation_ = new QPropertyAnimation(this, "rowGlow", this);
+        glowAnimation_->setDuration(150);
+        glowAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    }
+
+    qreal rowGlow() const { return rowGlow_; }
+
+    void setRowGlow(qreal rowGlow)
+    {
+        rowGlow_ = rowGlow;
+        viewport()->update();
+    }
+
+protected:
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        const int row = rowAt(event->pos().y());
+        if (row != hoverRow_) {
+            hoverRow_ = row;
+            animateGlow(row >= 0 ? 1.0 : 0.0);
+        }
+        QTableWidget::mouseMoveEvent(event);
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        hoverRow_ = -1;
+        animateGlow(0.0);
+        QTableWidget::leaveEvent(event);
+    }
+
+    void paintEvent(QPaintEvent *event) override
+    {
+        QTableWidget::paintEvent(event);
+
+        QPainter painter(viewport());
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        const auto drawRowBar = [this, &painter](int row, const QColor &color) {
+            if (row < 0 || row >= rowCount()) {
+                return;
+            }
+            const int y = rowViewportPosition(row);
+            const int h = rowHeight(row);
+            if (y + h < 0 || y > viewport()->height()) {
+                return;
+            }
+            const QRectF rect(8, y + 5, qMax(0, viewport()->width() - 16), qMax(0, h - 10));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(color);
+            painter.drawRoundedRect(rect, 7, 7);
+        };
+
+        if (selectionModel()) {
+            for (const QModelIndex &index : selectionModel()->selectedRows()) {
+                drawRowBar(index.row(), QColor(29, 31, 36, 18));
+            }
+        }
+        if (hoverRow_ >= 0) {
+            drawRowBar(hoverRow_, QColor(42, 54, 68, static_cast<int>(22 * rowGlow_)));
+        }
+    }
+
+private:
+    void animateGlow(qreal target)
+    {
+        glowAnimation_->stop();
+        glowAnimation_->setStartValue(rowGlow_);
+        glowAnimation_->setEndValue(target);
+        glowAnimation_->start();
+    }
+
+    int hoverRow_ = -1;
+    qreal rowGlow_ = 0.0;
+    QPropertyAnimation *glowAnimation_ = nullptr;
+};
+
 class CleanerWindow : public QWidget {
     Q_OBJECT
 
@@ -643,9 +731,9 @@ private:
     void buildUi()
     {
         setObjectName(QStringLiteral("AppRoot"));
-        auto *root = new QVBoxLayout(this);
-        root->setContentsMargins(14, 10, 14, 14);
-        root->setSpacing(12);
+        auto *windowRoot = new QVBoxLayout(this);
+        windowRoot->setContentsMargins(14, 10, 14, 14);
+        windowRoot->setSpacing(12);
 
         chrome_ = new QFrame;
         chrome_->setObjectName(QStringLiteral("ChromeBar"));
@@ -677,7 +765,20 @@ private:
         chromeLayout->addWidget(minimizeButton_);
         chromeLayout->addWidget(maximizeButton_);
         chromeLayout->addWidget(closeButton_);
-        root->addWidget(chrome_);
+        windowRoot->addWidget(chrome_);
+
+        auto *contentScroll = new QScrollArea;
+        contentScroll->setObjectName(QStringLiteral("ContentScroll"));
+        contentScroll->setWidgetResizable(true);
+        contentScroll->setFrameShape(QFrame::NoFrame);
+        contentScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        auto *content = new QWidget;
+        content->setObjectName(QStringLiteral("ContentPane"));
+        auto *root = new QVBoxLayout(content);
+        root->setContentsMargins(0, 0, 0, 0);
+        root->setSpacing(12);
+        contentScroll->setWidget(content);
+        windowRoot->addWidget(contentScroll, 1);
 
         auto *headerFrame = new QFrame;
         headerFrame->setObjectName(QStringLiteral("HeaderFrame"));
@@ -768,7 +869,7 @@ private:
         metricsTitle_ = new QLabel;
         metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
         metricsLayout->addWidget(metricsTitle_);
-        metrics_ = new QTableWidget(4, 4);
+        metrics_ = new RowHighlightTable(4, 4);
         metrics_->setObjectName(QStringLiteral("MetricsTable"));
         metrics_->verticalHeader()->hide();
         metrics_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -780,6 +881,7 @@ private:
         metrics_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
         metrics_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
         metrics_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+        metrics_->setMinimumHeight(270);
         metricsLayout->addWidget(metrics_);
         root->addWidget(metricsCard);
 
@@ -792,7 +894,7 @@ private:
         appsTitle_ = new QLabel;
         appsTitle_->setObjectName(QStringLiteral("SectionTitle"));
         appsLayout->addWidget(appsTitle_);
-        apps_ = new QTableWidget(0, 4);
+        apps_ = new RowHighlightTable(0, 4);
         apps_->setObjectName(QStringLiteral("AppsTable"));
         apps_->verticalHeader()->hide();
         apps_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -805,7 +907,7 @@ private:
         apps_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
         apps_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
         apps_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        apps_->setMinimumHeight(230);
+        apps_->setMinimumHeight(360);
         appsLayout->addWidget(apps_);
         root->addWidget(appsCard);
         connect(apps_, &QTableWidget::cellClicked, this, [this](int row, int) {
@@ -851,7 +953,7 @@ private:
         resultTitle_ = new QLabel;
         resultTitle_->setObjectName(QStringLiteral("SectionTitle"));
         planLayout->addWidget(resultTitle_);
-        plan_ = new QTableWidget(0, 3);
+        plan_ = new RowHighlightTable(0, 3);
         plan_->setObjectName(QStringLiteral("PlanTable"));
         plan_->verticalHeader()->hide();
         plan_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -862,11 +964,20 @@ private:
         plan_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
         plan_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
         plan_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+        plan_->setMinimumHeight(180);
         planLayout->addWidget(plan_, 1);
-        root->addWidget(planCard, 1);
+        root->addWidget(planCard);
 
         setStyleSheet(QStringLiteral(R"(
             QWidget#AppRoot { background: #f5f7fa; color: #1d1d1f; }
+            QWidget#ContentPane { background: transparent; }
+            QScrollArea#ContentScroll {
+                border: 0;
+                background: transparent;
+            }
+            QScrollArea#ContentScroll > QWidget > QWidget {
+                background: transparent;
+            }
             QFrame#ChromeBar { background: transparent; }
             QLabel#ChromeTitle { color: #555b64; font-weight: 600; }
             QFrame#HeaderFrame {
@@ -882,6 +993,7 @@ private:
                 border: 1px solid #d9dfe7;
                 border-radius: 8px;
                 background: #ffffff;
+                color: #1d1d1f;
             }
             QLabel#StatusTitle { color: #1d1d1f; font-weight: 700; }
             QLabel#StatusSummary { color: #24262b; font-weight: 600; }
@@ -903,12 +1015,12 @@ private:
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #1d1d1f, stop:1 #66798b);
             }
-            QTableWidget#MetricsTable, QTableWidget#AppsTable, QTableWidget#PlanTable {
+            QTableWidget#MetricsTable, QTableWidget#AppsTable, QTableWidget#PlanTable, QTableWidget#DetailTable {
                 border: 1px solid #d9dfe7;
                 border-radius: 8px;
                 background: #ffffff;
                 alternate-background-color: #f7f9fb;
-                selection-background-color: #dce5ee;
+                selection-background-color: transparent;
             }
             QHeaderView::section {
                 background: #edf1f5;
@@ -919,6 +1031,11 @@ private:
             }
             QTableWidget::item {
                 padding: 7px 8px;
+                color: #1d1d1f;
+            }
+            QTableWidget::item:selected {
+                background: transparent;
+                color: #1d1d1f;
             }
             QComboBox {
                 min-height: 34px;
@@ -998,7 +1115,7 @@ private:
         appsTitle_->setText(text.applicationsTitle);
         actionsTitle_->setText(text.actionsTitle);
         resultTitle_->setText(text.resultTitle);
-        metrics_->setHorizontalHeaderLabels({text.metric, text.current, text.cleanable, text.metricStatus});
+        metrics_->setHorizontalHeaderLabels({text.metric, text.before, text.released, text.metricStatus});
         apps_->setHorizontalHeaderLabels({text.appName, text.appKind, text.appContainers, text.appSize});
         plan_->setHorizontalHeaderLabels({text.stage, text.status, text.detail});
         updateStatusSummary();
@@ -1010,7 +1127,6 @@ private:
                 setCell(metrics_, row, col, state_.isEmpty() ? text.pendingScan : QStringLiteral("-"));
             }
         }
-        metrics_->resizeRowsToContents();
         if (!state_.isEmpty()) {
             updateMetrics();
             updateApplications();
@@ -1029,14 +1145,16 @@ private:
 
     static void configureTable(QTableWidget *table)
     {
-        table->setWordWrap(true);
+        table->setWordWrap(false);
         table->setTextElideMode(Qt::ElideNone);
         table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         table->horizontalHeader()->setMinimumSectionSize(92);
+        table->horizontalHeader()->setMinimumHeight(48);
         table->horizontalHeader()->setStretchLastSection(false);
-        table->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-        table->verticalHeader()->setMinimumSectionSize(40);
+        table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+        table->verticalHeader()->setMinimumSectionSize(48);
+        table->verticalHeader()->setDefaultSectionSize(50);
     }
 
     static QTableWidgetItem *setCell(QTableWidget *table, int row, int col, const QString &text)
@@ -1076,7 +1194,6 @@ private:
         setCell(plan_, row, 0, stage);
         setCell(plan_, row, 1, status);
         setCell(plan_, row, 2, detail);
-        plan_->resizeRowsToContents();
         plan_->scrollToBottom();
     }
 
@@ -1180,7 +1297,6 @@ private:
         metrics_->resizeColumnsToContents();
         metrics_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
         metrics_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-        metrics_->resizeRowsToContents();
     }
 
     void updateApplications()
@@ -1194,7 +1310,6 @@ private:
             setCell(apps_, row, 2, QString::number(app.value(QStringLiteral("containerCount")).toInt()));
             setCell(apps_, row, 3, fmtBytes(jsonInt64(app, QStringLiteral("bytes"))));
         }
-        apps_->resizeRowsToContents();
     }
 
     void showApplicationContainers(int row)
@@ -1211,7 +1326,8 @@ private:
         dialog.setStyleSheet(styleSheet());
         dialog.setWindowTitle(text.containerDetails + QStringLiteral(" - ") + app.value(QStringLiteral("ref")).toString());
         auto *layout = new QVBoxLayout(&dialog);
-        auto *table = new QTableWidget(containers.size(), 6);
+        auto *table = new RowHighlightTable(containers.size(), 6);
+        table->setObjectName(QStringLiteral("DetailTable"));
         table->setHorizontalHeaderLabels({text.module, text.version, text.appSize, text.currentLayer, text.inUse, text.path});
         table->verticalHeader()->hide();
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -1234,13 +1350,13 @@ private:
             setCell(table, i, 4, item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled);
             setCell(table, i, 5, item.value(QStringLiteral("path")).toString());
         }
-        table->resizeRowsToContents();
-        table->setMinimumSize(980, 420);
+        table->setMinimumSize(1060, 460);
         layout->addWidget(table);
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok);
         localizeDialogButtons(buttons);
         connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         layout->addWidget(buttons);
+        dialog.resize(1120, 560);
         dialog.exec();
     }
 
