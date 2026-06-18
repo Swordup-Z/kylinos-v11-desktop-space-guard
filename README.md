@@ -20,7 +20,16 @@ The app is intentionally defensive:
 ## Run From Source
 
 ```bash
-./gui/kylin-space-guard-gtk
+cmake -S . -B build -G Ninja
+cmake --build build
+./build/kylin-space-cleaner
+```
+
+Convenience wrapper:
+
+```bash
+make
+./build/kylin-space-cleaner
 ```
 
 CLI scan:
@@ -35,12 +44,18 @@ CLI scan:
 ./install.sh
 ```
 
+or:
+
+```bash
+make install
+```
+
 Then launch **麒麟V11空间清理** from a Chinese desktop session, or
 **KylinOS V11 Desktop Space Cleaner** from an English desktop session. You can
 also run:
 
 ```bash
-kylin-space-guard-gtk
+kylin-space-cleaner
 ```
 
 ## Dependencies
@@ -48,9 +63,9 @@ kylin-space-guard-gtk
 Runtime dependencies are intentionally small:
 
 - `bash`
-- `python3`
-- `python3-gi`
-- GTK 3 introspection bindings
+- `cmake`
+- `ninja-build`
+- Qt 5 development/runtime packages
 - `pkexec` for privileged actions
 - `/opt/kaiming-tools/bin/kaiming` when Kaiming actions are used
 
@@ -78,15 +93,10 @@ pkexec kylin-space-guard --apply --user "$USER" --install-monitor
 
 ## Design
 
-The GTK app is a user interface wrapper. The auditable helper in
-`bin/kylin-space-guard` owns all checks and privileged actions.
-
-This split keeps the desktop experience simple while making system changes easy
-to review, test, and automate.
-
-This repository is currently a functional prototype. For a long-lived KylinOS
-Desktop V11 application, the preferred production shape is a C++/Qt desktop app
-plus a small auditable C++ Polkit helper.
+The default desktop app is now a C++/Qt application. The auditable C++ helper
+owns scans and privileged actions, while the UI presents a plan, selectable
+items, current progress, and a result summary. The original Bash/GTK prototype
+is kept for rule comparison and fallback testing.
 
 ## License
 
