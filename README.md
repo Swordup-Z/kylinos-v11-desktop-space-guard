@@ -34,7 +34,9 @@ CLI scan:
 ./install.sh
 ```
 
-Then launch **麒麟V11空间清理** from the application menu, or run:
+Then launch **麒麟V11空间清理** from a Chinese desktop session, or
+**KylinOS V11 Desktop Space Cleaner** from an English desktop session. You can
+also run:
 
 ```bash
 kylin-space-guard-gtk
