@@ -467,8 +467,17 @@ private:
         QString scanTab;
         QString intro;
         QString scan;
+        QString startScan;
         QString cleanOld;
         QString manageAutostart;
+        QString scanProgressTitle;
+        QString scanProgressDetail;
+        QString scanResultTitle;
+        QString optimizeSelected;
+        QString rescan;
+        QString optimizationItems;
+        QString containerCleanup;
+        QString autostartOptimization;
         QString metric;
         QString before;
         QString released;
@@ -530,12 +539,21 @@ private:
             QStringLiteral("麒麟V11空间清理"),
             QStringLiteral("语言："),
             QStringLiteral("用户："),
-            QStringLiteral("当前状态"),
-            QStringLiteral("扫描清理"),
-            QStringLiteral("先扫描，再选择要执行的清理或抑制动作。执行前会展示计划，执行后会展示结果。"),
+            QStringLiteral("总览"),
             QStringLiteral("扫描"),
+            QString(),
+            QStringLiteral("扫描"),
+            QStringLiteral("开始扫描"),
             QStringLiteral("清理旧容器"),
             QStringLiteral("管理预热/自启动"),
+            QStringLiteral("正在扫描"),
+            QStringLiteral("正在读取系统空间、Kaiming 容器和启动项状态"),
+            QStringLiteral("扫描结果"),
+            QStringLiteral("执行选中优化"),
+            QStringLiteral("重新扫描"),
+            QStringLiteral("可优化条目"),
+            QStringLiteral("旧版本容器清理"),
+            QStringLiteral("预热/自启动优化"),
             QStringLiteral("项目"),
             QStringLiteral("当前占用"),
             QStringLiteral("可清理"),
@@ -598,12 +616,21 @@ private:
             QStringLiteral("KylinOS V11 Desktop Space Cleaner"),
             QStringLiteral("Language:"),
             QStringLiteral("User:"),
-            QStringLiteral("Status"),
-            QStringLiteral("Scan & Clean"),
-            QStringLiteral("Scan first, then choose cleanup or suppression actions. The app shows the plan before execution and the result afterwards."),
+            QStringLiteral("Overview"),
             QStringLiteral("Scan"),
+            QString(),
+            QStringLiteral("Scan"),
+            QStringLiteral("Start Scan"),
             QStringLiteral("Clean Old Containers"),
             QStringLiteral("Manage Preheat/Autostart"),
+            QStringLiteral("Scanning"),
+            QStringLiteral("Reading system usage, Kaiming containers, and startup entries"),
+            QStringLiteral("Scan Results"),
+            QStringLiteral("Optimize Selected"),
+            QStringLiteral("Rescan"),
+            QStringLiteral("Optimization Items"),
+            QStringLiteral("Old Container Cleanup"),
+            QStringLiteral("Preheat/Autostart Optimization"),
             QStringLiteral("Item"),
             QStringLiteral("Current Usage"),
             QStringLiteral("Cleanable"),
@@ -745,8 +772,8 @@ private:
         auto *headerFrame = new QFrame;
         headerFrame->setObjectName(QStringLiteral("HeaderFrame"));
         auto *header = new QVBoxLayout(headerFrame);
-        header->setContentsMargins(22, 18, 22, 18);
-        header->setSpacing(16);
+        header->setContentsMargins(22, 14, 22, 14);
+        header->setSpacing(0);
 
         auto *topBar = new QHBoxLayout;
         topBar->setSpacing(10);
@@ -779,10 +806,12 @@ private:
         auto *body = new QHBoxLayout;
         body->setSpacing(20);
         auto *copy = new QVBoxLayout;
-        copy->setSpacing(14);
+        copy->setContentsMargins(0, 0, 0, 0);
+        copy->setSpacing(0);
         intro_ = new QLabel;
         intro_->setObjectName(QStringLiteral("Intro"));
         intro_->setWordWrap(true);
+        intro_->setVisible(false);
         copy->addWidget(intro_);
 
         heroScanButton_ = new AnimatedButton;
@@ -790,6 +819,7 @@ private:
         heroScanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
         heroScanButton_->setIconSize(QSize(18, 18));
         heroScanButton_->setMinimumWidth(142);
+        heroScanButton_->setVisible(false);
         connect(heroScanButton_, &QPushButton::clicked, this, [this]() {
             if (tabs_) {
                 tabs_->setCurrentIndex(1);
@@ -827,6 +857,7 @@ private:
         auto *visualCard = new CardFrame;
         visualCard->setObjectName(QStringLiteral("VisualCard"));
         visualCard->setInteractive(false);
+        visualCard->setVisible(false);
         auto *visualLayout = new QVBoxLayout(visualCard);
         visualLayout->setContentsMargins(10, 10, 10, 10);
         visual_ = new SpaceVisual;
@@ -1003,32 +1034,99 @@ private:
         appsStack_->addWidget(appsOverview);
         appsStack_->addWidget(detailPage);
 
+        scanStack_ = new QStackedWidget;
+        scanStack_->setObjectName(QStringLiteral("ScanStack"));
+        scanPageLayout->addWidget(scanStack_, 1);
+
+        auto *scanLaunchPage = new QWidget;
+        scanLaunchPage->setObjectName(QStringLiteral("TabPage"));
+        auto *scanLaunchLayout = new QVBoxLayout(scanLaunchPage);
+        scanLaunchLayout->setContentsMargins(0, 0, 0, 0);
+        scanLaunchLayout->setSpacing(12);
+
         auto *actionsCard = new CardFrame;
-        actionsCard->setObjectName(QStringLiteral("CardFrame"));
+        actionsCard->setObjectName(QStringLiteral("HeroActionCard"));
         actionsCard->setInteractive(false);
         auto *actionsCardLayout = new QVBoxLayout(actionsCard);
-        actionsCardLayout->setContentsMargins(16, 14, 16, 16);
-        actionsCardLayout->setSpacing(10);
+        actionsCardLayout->setContentsMargins(20, 18, 20, 18);
+        actionsCardLayout->setSpacing(14);
         actionsTitle_ = new QLabel;
         actionsTitle_->setObjectName(QStringLiteral("SectionTitle"));
         actionsCardLayout->addWidget(actionsTitle_);
-        auto *actions = new QHBoxLayout;
-        actions->setSpacing(10);
         scanButton_ = new AnimatedButton;
-        cleanOldButton_ = new AnimatedButton;
-        autostartButton_ = new AnimatedButton;
         scanButton_->setObjectName(QStringLiteral("PrimaryButton"));
-        cleanOldButton_->setObjectName(QStringLiteral("ActionButton"));
-        autostartButton_->setObjectName(QStringLiteral("ActionButton"));
-        actions->addWidget(scanButton_);
-        actions->addWidget(cleanOldButton_);
-        actions->addWidget(autostartButton_);
-        actions->addStretch(1);
-        actionsCardLayout->addLayout(actions);
-        scanPageLayout->addWidget(actionsCard);
+        scanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+        scanButton_->setIconSize(QSize(18, 18));
+        scanButton_->setMinimumWidth(168);
+        actionsCardLayout->addWidget(scanButton_, 0, Qt::AlignLeft);
+        scanLaunchLayout->addWidget(actionsCard);
+        scanLaunchLayout->addStretch(1);
         connect(scanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
-        connect(autostartButton_, &QPushButton::clicked, this, &CleanerWindow::showAutostartDialog);
-        connect(cleanOldButton_, &QPushButton::clicked, this, &CleanerWindow::showContainerDialog);
+
+        auto *scanProgressPage = new QWidget;
+        scanProgressPage->setObjectName(QStringLiteral("TabPage"));
+        auto *scanProgressLayout = new QVBoxLayout(scanProgressPage);
+        scanProgressLayout->setContentsMargins(0, 0, 0, 0);
+        scanProgressLayout->setSpacing(12);
+        auto *progressCard = new CardFrame;
+        progressCard->setObjectName(QStringLiteral("HeroActionCard"));
+        progressCard->setInteractive(false);
+        auto *progressLayout = new QVBoxLayout(progressCard);
+        progressLayout->setContentsMargins(20, 18, 20, 18);
+        progressLayout->setSpacing(14);
+        scanProgressTitle_ = new QLabel;
+        scanProgressTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        scanProgressDetail_ = new QLabel;
+        scanProgressDetail_->setObjectName(QStringLiteral("Intro"));
+        scanProgressDetail_->setWordWrap(true);
+        scanFlowProgress_ = new QProgressBar;
+        scanFlowProgress_->setObjectName(QStringLiteral("FlowProgress"));
+        scanFlowProgress_->setRange(0, 100);
+        scanFlowProgress_->setValue(0);
+        progressLayout->addWidget(scanProgressTitle_);
+        progressLayout->addWidget(scanProgressDetail_);
+        progressLayout->addWidget(scanFlowProgress_);
+        scanProgressLayout->addWidget(progressCard);
+        scanProgressLayout->addStretch(1);
+
+        auto *scanResultPage = new QWidget;
+        scanResultPage->setObjectName(QStringLiteral("TabPage"));
+        auto *scanResultLayout = new QVBoxLayout(scanResultPage);
+        scanResultLayout->setContentsMargins(0, 0, 0, 0);
+        scanResultLayout->setSpacing(12);
+        auto *resultCard = new CardFrame;
+        resultCard->setObjectName(QStringLiteral("CardFrame"));
+        resultCard->setInteractive(false);
+        auto *resultLayout = new QVBoxLayout(resultCard);
+        resultLayout->setContentsMargins(16, 14, 16, 16);
+        resultLayout->setSpacing(10);
+        resultTitle_ = new QLabel;
+        resultTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        resultSummary_ = new QLabel;
+        resultSummary_->setObjectName(QStringLiteral("Intro"));
+        resultSummary_->setWordWrap(true);
+        resultLayout->addWidget(resultTitle_);
+        resultLayout->addWidget(resultSummary_);
+        auto *optimizationScroll = createCardList(&optimizationRows_, 330);
+        optimizationList_ = optimizationScroll->widget();
+        resultLayout->addWidget(optimizationScroll, 1);
+        auto *resultActions = new QHBoxLayout;
+        resultActions->setSpacing(10);
+        applyOptimizationsButton_ = new AnimatedButton;
+        rescanButton_ = new AnimatedButton;
+        applyOptimizationsButton_->setObjectName(QStringLiteral("PrimaryButton"));
+        rescanButton_->setObjectName(QStringLiteral("ActionButton"));
+        applyOptimizationsButton_->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
+        rescanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+        applyOptimizationsButton_->setIconSize(QSize(18, 18));
+        rescanButton_->setIconSize(QSize(18, 18));
+        resultActions->addWidget(applyOptimizationsButton_);
+        resultActions->addWidget(rescanButton_);
+        resultActions->addStretch(1);
+        resultLayout->addLayout(resultActions);
+        scanResultLayout->addWidget(resultCard, 1);
+        connect(applyOptimizationsButton_, &QPushButton::clicked, this, &CleanerWindow::applySelectedOptimizations);
+        connect(rescanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
 
         auto *planCard = new CardFrame;
         planCard->setObjectName(QStringLiteral("CardFrame"));
@@ -1036,14 +1134,17 @@ private:
         auto *planLayout = new QVBoxLayout(planCard);
         planLayout->setContentsMargins(16, 14, 16, 16);
         planLayout->setSpacing(10);
-        resultTitle_ = new QLabel;
-        resultTitle_->setObjectName(QStringLiteral("SectionTitle"));
-        planLayout->addWidget(resultTitle_);
+        planTitle_ = new QLabel;
+        planTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        planLayout->addWidget(planTitle_);
         auto *planScroll = createCardList(&planRows_, 260);
         planList_ = planScroll->widget();
         planLayout->addWidget(planScroll, 1);
-        scanPageLayout->addWidget(planCard);
-        scanPageLayout->addStretch(1);
+        scanResultLayout->addWidget(planCard);
+
+        scanStack_->addWidget(scanLaunchPage);
+        scanStack_->addWidget(scanProgressPage);
+        scanStack_->addWidget(scanResultPage);
 
         setStyleSheet(QStringLiteral(R"(
             QWidget#AppRoot { background: #f5f7fa; color: #1d1d1f; }
@@ -1098,6 +1199,12 @@ private:
             QLabel#Title { color: #1d1d1f; letter-spacing: 0px; }
             QFrame#HeaderFrame QLabel { color: #3a3d42; }
             QLabel#Intro { color: #63666d; font-size: 14px; line-height: 150%; }
+            QFrame#HeroActionCard {
+                border-radius: 8px;
+                border: 1px solid #d9dfe7;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #ffffff, stop:0.62 #f8fafc, stop:1 #eef3f7);
+            }
             QFrame#StatusFrame {
                 border: 1px solid #d9dfe7;
                 border-radius: 8px;
@@ -1160,6 +1267,40 @@ private:
                 border-radius: 6px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #1d1d1f, stop:1 #66798b);
+            }
+            QProgressBar#FlowProgress {
+                border: 1px solid #cbd3dd;
+                border-radius: 8px;
+                background: #eef2f6;
+                min-height: 16px;
+                max-height: 16px;
+                text-align: center;
+                color: transparent;
+            }
+            QProgressBar#FlowProgress::chunk {
+                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1d1d1f, stop:0.48 #596572, stop:1 #9aa7b3);
+            }
+            QCheckBox {
+                color: #1d1d1f;
+                font-weight: 750;
+                spacing: 10px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border-radius: 5px;
+                border: 1px solid #aebaca;
+                background: #ffffff;
+            }
+            QCheckBox::indicator:checked {
+                background: #1d1d1f;
+                border-color: #1d1d1f;
+            }
+            QCheckBox::indicator:disabled {
+                background: #eef2f6;
+                border-color: #d9dfe7;
             }
             QComboBox {
                 min-height: 34px;
@@ -1247,7 +1388,7 @@ private:
         intro_->setText(text.intro);
         statusTitle_->setText(text.live);
         if (heroScanButton_) {
-            heroScanButton_->setText(text.scan);
+            heroScanButton_->setText(text.startScan);
         }
         if (statusNavButton_) {
             statusNavButton_->setText(text.statusTab);
@@ -1255,9 +1396,15 @@ private:
         if (scanNavButton_) {
             scanNavButton_->setText(text.scanTab);
         }
-        scanButton_->setText(text.scan);
-        cleanOldButton_->setText(text.cleanOld);
-        autostartButton_->setText(text.manageAutostart);
+        if (scanButton_) {
+            scanButton_->setText(text.startScan);
+        }
+        if (cleanOldButton_) {
+            cleanOldButton_->setText(text.cleanOld);
+        }
+        if (autostartButton_) {
+            autostartButton_->setText(text.manageAutostart);
+        }
         metricsTitle_->setText(text.metricsTitle);
         appsTitle_->setText(text.applicationsTitle);
         if (metricsPageButton_) {
@@ -1269,8 +1416,27 @@ private:
         if (backToAppsButton_) {
             backToAppsButton_->setText(text.back);
         }
-        actionsTitle_->setText(text.actionsTitle);
-        resultTitle_->setText(text.resultTitle);
+        if (actionsTitle_) {
+            actionsTitle_->setText(text.scanTab);
+        }
+        if (scanProgressTitle_) {
+            scanProgressTitle_->setText(text.scanProgressTitle);
+        }
+        if (scanProgressDetail_) {
+            scanProgressDetail_->setText(text.scanProgressDetail);
+        }
+        if (resultTitle_) {
+            resultTitle_->setText(text.scanResultTitle);
+        }
+        if (planTitle_) {
+            planTitle_->setText(text.resultTitle);
+        }
+        if (applyOptimizationsButton_) {
+            applyOptimizationsButton_->setText(text.optimizeSelected);
+        }
+        if (rescanButton_) {
+            rescanButton_->setText(text.rescan);
+        }
         if (tabs_) {
             tabs_->setTabText(0, text.statusTab);
             tabs_->setTabText(1, text.scanTab);
@@ -1396,6 +1562,24 @@ private:
         return row;
     }
 
+    CardFrame *createOptimizationRow(QCheckBox *box, const QString &title, const QString &detail, const QString &size)
+    {
+        auto *row = new CardFrame;
+        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setInteractive(true);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(14, 10, 14, 10);
+        layout->setSpacing(12);
+        box->setText(title);
+        layout->addWidget(box, 2);
+        auto *detailLabel = makeLabel(detail, QStringLiteral("PathValue"));
+        layout->addWidget(detailLabel, 3);
+        if (!size.isEmpty()) {
+            layout->addWidget(createValuePill(t().appSize, size), 1);
+        }
+        return row;
+    }
+
     void resetMetricCards()
     {
         const Text text = t();
@@ -1483,9 +1667,21 @@ private:
         if (visual_) {
             visual_->setWorking(busy);
         }
-        scanButton_->setEnabled(!busy);
-        cleanOldButton_->setEnabled(!busy);
-        autostartButton_->setEnabled(!busy);
+        if (scanButton_) {
+            scanButton_->setEnabled(!busy);
+        }
+        if (cleanOldButton_) {
+            cleanOldButton_->setEnabled(!busy);
+        }
+        if (autostartButton_) {
+            autostartButton_->setEnabled(!busy);
+        }
+        if (applyOptimizationsButton_) {
+            applyOptimizationsButton_->setEnabled(!busy);
+        }
+        if (rescanButton_) {
+            rescanButton_->setEnabled(!busy);
+        }
         if (busy) {
             progress_->setRange(0, 0);
             lastUpdate_->setText(t().updating);
@@ -1500,18 +1696,57 @@ private:
         scanInternal(true);
     }
 
+    void beginScanProgress()
+    {
+        if (!scanStack_) {
+            return;
+        }
+        scanProgressValue_ = 4;
+        if (scanFlowProgress_) {
+            scanFlowProgress_->setValue(scanProgressValue_);
+        }
+        if (scanProgressDetail_) {
+            scanProgressDetail_->setText(t().scanProgressDetail);
+        }
+        scanStack_->setCurrentIndex(1);
+        fadeIn(scanStack_->currentWidget());
+        if (!scanProgressTimer_) {
+            scanProgressTimer_ = new QTimer(this);
+            connect(scanProgressTimer_, &QTimer::timeout, this, [this]() {
+                if (!scanFlowProgress_) {
+                    return;
+                }
+                scanProgressValue_ = qMin(88, scanProgressValue_ + 7);
+                scanFlowProgress_->setValue(scanProgressValue_);
+            });
+        }
+        scanProgressTimer_->start(350);
+    }
+
+    void finishScanProgress()
+    {
+        if (scanProgressTimer_) {
+            scanProgressTimer_->stop();
+        }
+        scanProgressValue_ = 100;
+        if (scanFlowProgress_) {
+            scanFlowProgress_->setValue(100);
+        }
+    }
+
     void scanInternal(bool manual)
     {
         const Text text = t();
         setBusy(true);
         if (manual) {
             clearRows(planRows_);
-            addPlanRow(text.planned, text.running, language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("Read space usage, old Kaiming containers, and autostart entries.")
-                : QStringLiteral("读取空间占用、旧 Kaiming 容器和自启动项。"));
+            beginScanProgress();
         }
         runProcess({helper_, QStringLiteral("--scan"), QStringLiteral("--user"), user_}, [this, manual](int code, const QByteArray &output) {
             const Text text = t();
+            if (manual) {
+                finishScanProgress();
+            }
             if (code != 0) {
                 const QString path = writeErrorLog(QStringLiteral("scan helper failed"), output);
                 addPlanRow(text.rawLog, text.failed, language_->currentData().toString() == QStringLiteral("en")
@@ -1536,7 +1771,7 @@ private:
             updateApplications();
             updateStatusSummary();
             if (manual) {
-                addPlanRow(text.scan, text.done, scanSummary());
+                showScanResults();
             }
             animateRefresh();
             setBusy(false);
@@ -1556,6 +1791,82 @@ private:
             return QStringLiteral("%1 old containers, %2 active autostart entries.").arg(containers).arg(activeAutostarts);
         }
         return QStringLiteral("发现 %1 个旧容器候选，%2 个仍启用的自启动项。").arg(containers).arg(activeAutostarts);
+    }
+
+    void addOptimizationCard(CardFrame *card)
+    {
+        if (!optimizationRows_) {
+            return;
+        }
+        if (optimizationRows_->count() > 0 && optimizationRows_->itemAt(optimizationRows_->count() - 1)->spacerItem()) {
+            delete optimizationRows_->takeAt(optimizationRows_->count() - 1);
+        }
+        optimizationRows_->addWidget(card);
+        optimizationRows_->addStretch(1);
+    }
+
+    void showScanResults()
+    {
+        const Text text = t();
+        resultContainerBoxes_.clear();
+        resultAutostartBoxes_.clear();
+        clearRows(optimizationRows_);
+        clearRows(planRows_);
+
+        const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
+        const QJsonArray autostarts = state_.value(QStringLiteral("autostarts")).toArray();
+        int selectableContainers = 0;
+        int selectableAutostarts = 0;
+
+        addOptimizationCard(createInfoRow(text.containerCleanup, {text.status}, {text.selectContainers}));
+        for (const QJsonValue &value : containers) {
+            const QJsonObject item = value.toObject();
+            auto *box = new QCheckBox;
+            const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
+            box->setChecked(selectable);
+            box->setEnabled(selectable);
+            if (selectable) {
+                ++selectableContainers;
+            }
+            const QString title = QStringLiteral("%1  %2").arg(item.value(QStringLiteral("ref")).toString(),
+                                                               item.value(QStringLiteral("version")).toString());
+            addOptimizationCard(createOptimizationRow(box,
+                                                      title,
+                                                      item.value(QStringLiteral("path")).toString(),
+                                                      fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
+            resultContainerBoxes_.append({item.value(QStringLiteral("path")).toString(), box});
+        }
+
+        addOptimizationCard(createInfoRow(text.autostartOptimization, {text.status}, {text.selectAutostarts}));
+        for (const QJsonValue &value : autostarts) {
+            const QJsonObject item = value.toObject();
+            if (item.value(QStringLiteral("disabled")).toBool()) {
+                continue;
+            }
+            auto *box = new QCheckBox;
+            box->setChecked(true);
+            ++selectableAutostarts;
+            addOptimizationCard(createOptimizationRow(box,
+                                                      localName(item),
+                                                      localDescription(item) + QStringLiteral("\n") + item.value(QStringLiteral("target")).toString(),
+                                                      QString()));
+            resultAutostartBoxes_.append({item.value(QStringLiteral("id")).toString(), box});
+        }
+
+        if (selectableContainers == 0 && selectableAutostarts == 0) {
+            addOptimizationCard(createInfoRow(text.optimizationItems, {text.status}, {text.noCleanable}));
+        }
+
+        if (resultSummary_) {
+            resultSummary_->setText(scanSummary());
+        }
+        if (applyOptimizationsButton_) {
+            applyOptimizationsButton_->setEnabled(selectableContainers > 0 || selectableAutostarts > 0);
+        }
+        if (scanStack_) {
+            scanStack_->setCurrentIndex(2);
+            fadeIn(scanStack_->currentWidget());
+        }
     }
 
     void updateMetrics()
@@ -1871,6 +2182,106 @@ private:
         });
     }
 
+    void applySelectedOptimizations()
+    {
+        QStringList containerPaths;
+        QStringList disableIds;
+        for (const auto &pair : resultContainerBoxes_) {
+            if (pair.second && pair.second->isChecked() && pair.second->isEnabled()) {
+                containerPaths << pair.first;
+            }
+        }
+        for (const auto &pair : resultAutostartBoxes_) {
+            if (pair.second && pair.second->isChecked()) {
+                disableIds << pair.first;
+            }
+        }
+        clearRows(planRows_);
+        if (containerPaths.isEmpty() && disableIds.isEmpty()) {
+            addPlanRow(t().planned, t().done, t().noCleanable);
+            return;
+        }
+        setBusy(true);
+        runSelectedAutostartOptimization(disableIds, containerPaths);
+    }
+
+    void runSelectedAutostartOptimization(const QStringList &disableIds, const QStringList &containerPaths)
+    {
+        if (disableIds.isEmpty()) {
+            runSelectedContainerCleanup(containerPaths);
+            return;
+        }
+        addPlanRow(t().autostartOptimization, t().running, language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Disable %1 selected preheat/autostart entries.").arg(disableIds.size())
+            : QStringLiteral("禁用 %1 个选中的预热/自启动项。").arg(disableIds.size()));
+        runProcess({helper_, QStringLiteral("--manage-autostart"), QStringLiteral("--user"), user_,
+                    QStringLiteral("--disable-entries"), disableIds.join(QLatin1Char(',')),
+                    QStringLiteral("--enable-entries"), QString()},
+                   [this, containerPaths](int code, const QByteArray &output) {
+            appendActionResult(t().autostartOptimization, code, output);
+            runSelectedContainerCleanup(containerPaths);
+        });
+    }
+
+    void runSelectedContainerCleanup(const QStringList &paths)
+    {
+        if (paths.isEmpty()) {
+            finishSelectedOptimization();
+            return;
+        }
+        QStringList command{QStringLiteral("pkexec"), helper_, QStringLiteral("--apply-old-containers")};
+        for (const QString &path : paths) {
+            command << QStringLiteral("--container") << path;
+        }
+        addPlanRow(t().containerCleanup, t().running, language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Move %1 selected old containers to DATA rollback quarantine.").arg(paths.size())
+            : QStringLiteral("移动 %1 个选中的旧容器到 DATA 回滚隔离区。").arg(paths.size()));
+        runProcess(command, [this](int code, const QByteArray &output) {
+            appendActionResult(t().containerCleanup, code, output);
+            finishSelectedOptimization();
+        });
+    }
+
+    void appendActionResult(const QString &stage, int code, const QByteArray &output)
+    {
+        const Text text = t();
+        const QJsonDocument doc = QJsonDocument::fromJson(output);
+        if (code != 0 || !doc.isObject()) {
+            const QString path = writeErrorLog(QStringLiteral("selected optimization failed"), output);
+            addPlanRow(stage, text.failed, language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Operation failed. See the error dialog for the log path.")
+                : QStringLiteral("操作失败。错误日志位置见弹窗。"));
+            showErrorDialog(path);
+            return;
+        }
+        int okCount = 0;
+        int failCount = 0;
+        qint64 released = 0;
+        for (const QJsonValue &value : doc.object().value(QStringLiteral("results")).toArray()) {
+            const QJsonObject item = value.toObject();
+            if (item.value(QStringLiteral("ok")).toBool()) {
+                ++okCount;
+                released += jsonInt64(item, QStringLiteral("bytes"));
+            } else {
+                ++failCount;
+            }
+        }
+        const QString summary = language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("%1 succeeded, %2 failed, released %3.").arg(okCount).arg(failCount).arg(fmtBytes(released))
+            : QStringLiteral("%1 项成功，%2 项失败，释放 %3。").arg(okCount).arg(failCount).arg(fmtBytes(released));
+        addPlanRow(stage, failCount == 0 ? text.done : text.failed, summary);
+        if (failCount > 0) {
+            const QString path = writeErrorLog(QStringLiteral("partial selected optimization failure"), output);
+            showErrorDialog(path);
+        }
+    }
+
+    void finishSelectedOptimization()
+    {
+        setBusy(false);
+        scanInternal(false);
+    }
+
     void handleActionResult(int code, const QByteArray &output)
     {
         const Text text = t();
@@ -1996,25 +2407,39 @@ private:
     QTabWidget *tabs_ = nullptr;
     QStackedWidget *statusStack_ = nullptr;
     QStackedWidget *appsStack_ = nullptr;
+    QStackedWidget *scanStack_ = nullptr;
     QLabel *metricsTitle_ = nullptr;
     QLabel *appsTitle_ = nullptr;
     QLabel *detailTitle_ = nullptr;
     QLabel *actionsTitle_ = nullptr;
     QLabel *resultTitle_ = nullptr;
+    QLabel *resultSummary_ = nullptr;
+    QLabel *planTitle_ = nullptr;
+    QLabel *scanProgressTitle_ = nullptr;
+    QLabel *scanProgressDetail_ = nullptr;
     QWidget *metricsList_ = nullptr;
     QWidget *appsList_ = nullptr;
     QWidget *detailList_ = nullptr;
     QWidget *planList_ = nullptr;
+    QWidget *optimizationList_ = nullptr;
     QVBoxLayout *metricsRows_ = nullptr;
     QVBoxLayout *appsRows_ = nullptr;
     QVBoxLayout *detailRows_ = nullptr;
     QVBoxLayout *planRows_ = nullptr;
+    QVBoxLayout *optimizationRows_ = nullptr;
+    QProgressBar *scanFlowProgress_ = nullptr;
+    QTimer *scanProgressTimer_ = nullptr;
+    int scanProgressValue_ = 0;
+    QVector<QPair<QString, QCheckBox *>> resultContainerBoxes_;
+    QVector<QPair<QString, QCheckBox *>> resultAutostartBoxes_;
     QPushButton *heroScanButton_ = nullptr;
     QPushButton *statusNavButton_ = nullptr;
     QPushButton *scanNavButton_ = nullptr;
     QPushButton *metricsPageButton_ = nullptr;
     QPushButton *appsPageButton_ = nullptr;
     QPushButton *backToAppsButton_ = nullptr;
+    QPushButton *applyOptimizationsButton_ = nullptr;
+    QPushButton *rescanButton_ = nullptr;
     QPushButton *scanButton_ = nullptr;
     QPushButton *cleanOldButton_ = nullptr;
     QPushButton *autostartButton_ = nullptr;
