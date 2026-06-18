@@ -1,9 +1,10 @@
-# Kylin Space Guard
+# 麒麟V11空间清理
 
-Kylin Space Guard is a conservative desktop utility for KylinOS Desktop V11.
-It reports Kaiming/KARE and ostree space usage, helps disable wasteful Kaiming
-autostart behavior, and can uninstall selected Kaiming apps through the official
-`kaiming` command.
+English name: **KylinOS V11 Desktop Space Cleaner**.
+
+麒麟V11空间清理是面向 KylinOS Desktop V11 的保守型桌面清理工具。
+它会展示 Kaiming/KARE 与 ostree 的空间占用，帮助禁用浪费空间的
+Kaiming 自启动行为，并通过官方 `kaiming` 命令卸载指定 Kaiming 应用。
 
 The app is intentionally defensive:
 
@@ -33,7 +34,7 @@ CLI scan:
 ./install.sh
 ```
 
-Then launch **Kylin Space Guard** from the application menu, or run:
+Then launch **麒麟V11空间清理** from the application menu, or run:
 
 ```bash
 kylin-space-guard-gtk
