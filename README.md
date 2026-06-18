@@ -3,17 +3,18 @@
 English name: **KylinOS V11 Desktop Space Cleaner**.
 
 麒麟V11空间清理是面向 KylinOS Desktop V11 的保守型桌面清理工具。
-它会展示 Kaiming/KARE 与 ostree 的空间占用，帮助禁用浪费空间的
-Kaiming 自启动行为，并通过官方 `kaiming` 命令卸载指定 Kaiming 应用。
+它会展示 Kaiming/KARE 与 ostree 的空间占用，识别 Kaiming 更新后遗留的
+旧版本应用容器，并在用户确认后把安全候选移动到 DATA 隔离区。
+它也可以帮助禁用浪费空间的 Kaiming 自启动行为。
 
 The app is intentionally defensive:
 
 - It never deletes `/ostree`, `/sysroot/ostree`, EFI files, GRUB config,
   loader entries, `/etc/fstab`, or partition tables.
 - It does not rewrite boot configuration.
-- It uses `kaiming uninstall` for installed Kaiming apps.
-- It only quarantines clearly non-current Kaiming version directories when the
-  user explicitly requests that action.
+- It does not uninstall applications as a cleanup action.
+- It only quarantines clearly non-current Kaiming application container version
+  directories when the user explicitly requests that action.
 - System-level actions require `pkexec` and Kylin maintain mode.
 
 ## Run From Source
@@ -57,16 +58,16 @@ The CLI helper works without `rg`; it falls back to `grep`.
 
 ## Common Actions
 
+Move old Kaiming application container versions to a DATA rollback quarantine:
+
+```bash
+pkexec kylin-space-guard --apply --user "$USER" --clean-old-app-containers
+```
+
 Disable Kaiming/KARE preheat and silent autostart entries for the current user:
 
 ```bash
 pkexec kylin-space-guard --apply --user "$USER" --disable-kaiming-autostart
-```
-
-Uninstall a Kaiming app while keeping user data:
-
-```bash
-pkexec kylin-space-guard --apply --user "$USER" --uninstall-kaiming-app org.mozilla.net.mozilla.firefox
 ```
 
 Install a weekly reporting timer:
@@ -82,6 +83,10 @@ The GTK app is a user interface wrapper. The auditable helper in
 
 This split keeps the desktop experience simple while making system changes easy
 to review, test, and automate.
+
+This repository is currently a functional prototype. For a long-lived KylinOS
+Desktop V11 application, the preferred production shape is a C++/Qt desktop app
+plus a small auditable C++ Polkit helper.
 
 ## License
 

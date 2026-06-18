@@ -30,10 +30,8 @@ TEXT = {
         "kare_upper": "KARE 写入层",
         "scan": "扫描",
         "disable_autostart": "禁用自启动",
-        "quarantine": "隔离孤儿层",
+        "clean_old_containers": "清理旧容器",
         "monitor": "安装监控",
-        "app_id": "应用 ID：",
-        "uninstall_app": "卸载应用",
         "ready": "就绪",
         "details": "详细日志",
         "scanning": "正在扫描...",
@@ -41,19 +39,17 @@ TEXT = {
         "running": "正在执行：{action}...",
         "action_done": "{action} 已完成，退出码 {code}",
         "summary": "执行前：Kaiming {kaiming}，ostree 写入层 {ostree}，KARE 写入层 {kare}。本次释放：{released}。",
-        "missing_app_title": "缺少应用 ID",
-        "missing_app_body": "请先输入要卸载的 Kaiming 应用 ID。",
         "confirm_title": "确认执行此操作？",
         "confirm_body": (
             "{action}\n\n"
-            "应用会记录执行前和执行后的空间占用。该操作会请求 Polkit 授权；"
-            "helper 会拒绝修改启动文件、ostree deployment、fstab 或分区表。"
+            "应用会记录执行前和执行后的空间占用。清理旧容器时只会把不属于当前版本、"
+            "且未被挂载使用的 Kaiming 容器移动到 DATA 隔离区；不会卸载应用，也不会修改"
+            "启动文件、ostree deployment、fstab 或分区表。"
         ),
         "helper_missing": "找不到 helper：{path}",
         "action_disable": "禁用 Kaiming 自启动",
-        "action_quarantine": "隔离 Kaiming 孤儿层",
+        "action_clean_old_containers": "清理旧版本应用容器",
         "action_monitor": "安装每周空间监控",
-        "action_uninstall": "卸载 {app}",
     },
     "en": {
         "title": "KylinOS V11 Desktop Space Cleaner",
@@ -70,10 +66,8 @@ TEXT = {
         "kare_upper": "KARE Upper",
         "scan": "Scan",
         "disable_autostart": "Disable Autostart",
-        "quarantine": "Quarantine Orphans",
+        "clean_old_containers": "Clean Old Containers",
         "monitor": "Install Monitor",
-        "app_id": "App ID:",
-        "uninstall_app": "Uninstall App",
         "ready": "Ready",
         "details": "Details",
         "scanning": "Scanning...",
@@ -81,19 +75,17 @@ TEXT = {
         "running": "Running {action}...",
         "action_done": "{action} finished with exit code {code}",
         "summary": "Before: Kaiming {kaiming}, ostree upper {ostree}, KARE upper {kare}. Released by last action: {released}.",
-        "missing_app_title": "Missing app id",
-        "missing_app_body": "Enter a Kaiming application ID first.",
         "confirm_title": "Apply this action?",
         "confirm_body": (
             "{action}\n\n"
-            "The app records space before and after the action. It requests Polkit "
-            "authorization and the helper refuses to edit boot files, ostree deployments, fstab, or partitions."
+            "The app records space before and after the action. Cleaning old containers only moves "
+            "non-current, unused Kaiming containers to a DATA rollback quarantine. It does not uninstall "
+            "applications or edit boot files, ostree deployments, fstab, or partitions."
         ),
         "helper_missing": "helper not found: {path}",
         "action_disable": "disable Kaiming autostart",
-        "action_quarantine": "quarantine Kaiming orphan layers",
+        "action_clean_old_containers": "clean old application containers",
         "action_monitor": "install weekly space monitor",
-        "action_uninstall": "uninstall {app}",
     },
 }
 METRICS = ["root_used", "kaiming", "ostree_upper", "kare_upper"]
@@ -202,10 +194,10 @@ class SpaceGuardWindow(Gtk.Window):
 
         self.user_label = Gtk.Label()
         header.pack_start(self.user_label, False, False, 0)
-        self.user_entry = Gtk.Entry()
-        self.user_entry.set_text(self.user)
-        self.user_entry.set_width_chars(16)
-        header.pack_start(self.user_entry, False, False, 0)
+        self.user_value = Gtk.Label(label=self.user)
+        self.user_value.set_selectable(True)
+        self.user_value.set_xalign(0)
+        header.pack_start(self.user_value, False, False, 0)
 
         self.summary = Gtk.Label()
         self.summary.set_xalign(0)
@@ -253,24 +245,13 @@ class SpaceGuardWindow(Gtk.Window):
 
         self.quarantine_button = Gtk.Button()
         self.quarantine_button.connect(
-            "clicked", lambda _b: self.apply_action("--quarantine-orphan-kaiming-layers", self.t("action_quarantine"))
+            "clicked", lambda _b: self.apply_action("--clean-old-app-containers", self.t("action_clean_old_containers"))
         )
         action_bar.pack_start(self.quarantine_button, False, False, 0)
 
         self.monitor_button = Gtk.Button()
         self.monitor_button.connect("clicked", lambda _b: self.apply_action("--install-monitor", self.t("action_monitor")))
         action_bar.pack_start(self.monitor_button, False, False, 0)
-
-        uninstall_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        root.pack_start(uninstall_box, False, False, 0)
-        self.app_id_label = Gtk.Label()
-        uninstall_box.pack_start(self.app_id_label, False, False, 0)
-        self.app_entry = Gtk.Entry()
-        self.app_entry.set_placeholder_text("org.mozilla.net.mozilla.firefox")
-        uninstall_box.pack_start(self.app_entry, True, True, 0)
-        self.uninstall_button = Gtk.Button()
-        self.uninstall_button.connect("clicked", lambda _b: self.uninstall_app())
-        uninstall_box.pack_start(self.uninstall_button, False, False, 0)
 
         self.status = Gtk.Label()
         self.status.set_xalign(0)
@@ -316,10 +297,8 @@ class SpaceGuardWindow(Gtk.Window):
             self.metric_name_labels[key].set_text(self.t(key))
         self.scan_button.set_label(self.t("scan"))
         self.disable_autostart_button.set_label(self.t("disable_autostart"))
-        self.quarantine_button.set_label(self.t("quarantine"))
+        self.quarantine_button.set_label(self.t("clean_old_containers"))
         self.monitor_button.set_label(self.t("monitor"))
-        self.app_id_label.set_text(self.t("app_id"))
-        self.uninstall_button.set_label(self.t("uninstall_app"))
         self.expander.set_label(self.t("details"))
         if not self.baseline:
             self.summary.set_text(self.t("intro"))
@@ -363,13 +342,11 @@ class SpaceGuardWindow(Gtk.Window):
             self.disable_autostart_button,
             self.quarantine_button,
             self.monitor_button,
-            self.uninstall_button,
         ):
             button.set_sensitive(not busy)
 
     def base_args(self):
-        user = self.user_entry.get_text().strip() or self.user
-        return [self.helper, "--user", user]
+        return [self.helper, "--user", self.user]
 
     def scan(self):
         self.set_output("")
@@ -408,16 +385,6 @@ class SpaceGuardWindow(Gtk.Window):
         if not self.confirm_apply(action_label):
             return
         self.run_apply([action], action_label)
-
-    def uninstall_app(self):
-        app_id = self.app_entry.get_text().strip()
-        if not app_id:
-            self.message(self.t("missing_app_title"), self.t("missing_app_body"))
-            return
-        action_label = self.t("action_uninstall").format(app=app_id)
-        if not self.confirm_apply(action_label):
-            return
-        self.run_apply(["--uninstall-kaiming-app", app_id], action_label)
 
     def confirm_apply(self, action):
         dialog = Gtk.MessageDialog(

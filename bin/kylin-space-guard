@@ -8,9 +8,7 @@ TARGET_HOME=""
 THRESHOLD_GB=10
 INSTALL_MONITOR=0
 DISABLE_KAIMING_AUTOSTART=0
-QUARANTINE_ORPHAN_KAIMING_LAYERS=0
-UNINSTALL_ALL_KAIMING_APPS=0
-declare -a UNINSTALL_KAIMING_APPS=()
+CLEAN_OLD_APP_CONTAINERS=0
 
 KAIMING_BIN=/opt/kaiming-tools/bin/kaiming
 REPORT_TIME=$(date '+%Y-%m-%d %H:%M:%S')
@@ -25,22 +23,17 @@ Default action is a read-only report. Apply mode requires root and Kylin
 maintain mode for system-level changes.
 
 Actions:
+  --clean-old-app-containers
+      Move old Kaiming application container version directories to a DATA
+      rollback quarantine. Only directories not listed by 'kaiming list' are
+      candidates, and mounted/in-use paths are skipped.
+
   --disable-kaiming-autostart
       Create user-level Hidden=true overrides for known Kaiming/KARE preheat
       or silent autostart desktop entries.
 
-  --uninstall-kaiming-app APPID
-      Uninstall one Kaiming application through the official kaiming command.
-      Can be passed multiple times. User data is kept.
-
-  --uninstall-all-kaiming-apps
-      Uninstall all installed Kaiming applications except base/runtime layers.
-      User data is kept. This is useful when Kaiming apps are not needed.
-
   --quarantine-orphan-kaiming-layers
-      Move non-current Kaiming version directories to a DATA rollback
-      quarantine. This only acts on extra version directories not listed by
-      'kaiming list'. Current systems often have no such orphan layers.
+      Deprecated alias for --clean-old-app-containers.
 
   --install-monitor
       Install a systemd timer that writes periodic reports to
@@ -52,16 +45,16 @@ Options:
 
 Examples:
   $SCRIPT_NAME --dry-run --user zengjianqi
+  sudo $SCRIPT_NAME --apply --user zengjianqi --clean-old-app-containers
   sudo $SCRIPT_NAME --apply --user zengjianqi --disable-kaiming-autostart
-  sudo $SCRIPT_NAME --apply --user zengjianqi --uninstall-kaiming-app org.mozilla.net.mozilla.firefox
   sudo $SCRIPT_NAME --apply --user zengjianqi --install-monitor
 
 Safety model:
   - Never deletes /ostree, /sysroot/ostree, /boot, EFI files, or deployments.
   - Never rewrites GRUB, loader entries, fstab, or partition tables.
-  - Uses kaiming uninstall for installed Kaiming applications.
-  - Moves only clearly non-current Kaiming version directories when explicitly
-    requested, and keeps them under DATA for rollback.
+  - Does not uninstall applications as a cleanup action.
+  - Moves only clearly non-current Kaiming container version directories when
+    explicitly requested, and keeps them under DATA for rollback.
 EOF
 }
 
@@ -158,6 +151,40 @@ kaiming_app_refs() {
   kaiming_installed_refs | awk '$1 !~ /^top\.openkylin\.(base|ukui)$/ { print $1 }'
 }
 
+kaiming_layer_dirs() {
+  find /var/opt/kaiming/layers/stable -mindepth 5 -maxdepth 5 -type d -printf '%p\n' 2>/dev/null | sort
+}
+
+current_kaiming_layer_dirs() {
+  find /var/opt/kaiming/info -maxdepth 1 -type f -name '*.list' -print0 2>/dev/null |
+    xargs -0 grep -hE '^/opt/kaiming/layers/stable/[^/]+/(app|runtime|base)/[^/]+/[^/]+/[^/]+$' 2>/dev/null |
+    sed 's#^/opt/kaiming/#/var/opt/kaiming/#' |
+    sort -u
+}
+
+kaiming_layer_fields() {
+  local layer=$1
+  local rel arch kind ref module version extra
+  rel=${layer#/var/opt/kaiming/layers/stable/}
+  IFS=/ read -r arch kind ref module version extra <<<"$rel"
+  [[ -n "$arch" && -n "$kind" && -n "$ref" && -n "$module" && -n "$version" && -z "${extra:-}" ]] || return 1
+  printf '%s\t%s\t%s\t%s\t%s\n' "$arch" "$kind" "$ref" "$module" "$version"
+}
+
+path_is_mounted_or_in_use() {
+  local path=$1
+  grep -RFl -- "$path" /proc/*/mountinfo >/dev/null 2>&1
+}
+
+collect_current_kaiming_versions() {
+  local -n out=$1
+  local layer arch kind ref module version
+  while IFS= read -r layer; do
+    IFS=$'\t' read -r arch kind ref module version < <(kaiming_layer_fields "$layer") || continue
+    out["$ref|$version"]=1
+  done < <(current_kaiming_layer_dirs)
+}
+
 report_storage() {
   print_header "filesystem"
   df -hT / /home "$TARGET_HOME" /data /sysroot /var 2>/dev/null || true
@@ -176,8 +203,12 @@ report_storage() {
   local ostree_upper_gb kaiming_gb
   ostree_upper_gb=$(to_gib_int /sysroot/ostree/pkgs)
   kaiming_gb=$(to_gib_int /var/opt/kaiming)
-  (( ostree_upper_gb > THRESHOLD_GB )) && warn "ostree package overlay area is ${ostree_upper_gb}GiB"
-  (( kaiming_gb > THRESHOLD_GB )) && warn "Kaiming data is ${kaiming_gb}GiB"
+  if (( ostree_upper_gb > THRESHOLD_GB )); then
+    warn "ostree package overlay area is ${ostree_upper_gb}GiB"
+  fi
+  if (( kaiming_gb > THRESHOLD_GB )); then
+    warn "Kaiming data is ${kaiming_gb}GiB"
+  fi
 }
 
 report_boot_risk() {
@@ -215,8 +246,9 @@ report_kaiming() {
   "$KAIMING_BIN" update --upgradable 2>&1 || true
 
   print_header "kaiming version directories"
-  find /var/opt/kaiming/layers/stable -mindepth 5 -maxdepth 5 -type d -printf '%p\n' 2>/dev/null |
-    sort || true
+  kaiming_layer_dirs || true
+
+  report_old_kaiming_containers
 }
 
 report_autostart() {
@@ -258,59 +290,72 @@ disable_user_autostart() {
   done
 }
 
-uninstall_kaiming_refs() {
+report_old_kaiming_containers() {
   [[ -x "$KAIMING_BIN" ]] || die "Kaiming command not found"
-  local refs=("$@")
-  local ref
-  for ref in "${refs[@]}"; do
-    [[ -n "$ref" ]] || continue
-    run_cmd "$KAIMING_BIN" kill "$ref"
-    run_cmd "$KAIMING_BIN" uninstall -y "$ref"
-  done
+  declare -A current=()
+  collect_current_kaiming_versions current
+
+  print_header "old kaiming app container candidates"
+
+  local layer arch kind ref module version size
+  local found=0
+  while IFS= read -r layer; do
+    IFS=$'\t' read -r arch kind ref module version < <(kaiming_layer_fields "$layer") || continue
+    if [[ -n "${current["$ref|$version"]:-}" ]]; then
+      continue
+    fi
+    size=$(du -sh "$layer" 2>/dev/null | awk '{print $1}' || true)
+    if path_is_mounted_or_in_use "$layer"; then
+      log "skip in-use: ${size:-?} $ref $version $layer"
+    else
+      log "candidate: ${size:-?} $ref $version $layer"
+    fi
+    found=$((found + 1))
+  done < <(kaiming_layer_dirs)
+
+  if (( found == 0 )); then
+    log "No old Kaiming app container version directories found."
+  else
+    log "Apply --clean-old-app-containers to move candidates to DATA rollback quarantine."
+  fi
 }
 
-collect_all_kaiming_apps() {
-  mapfile -t UNINSTALL_KAIMING_APPS < <(kaiming_app_refs)
-}
-
-quarantine_orphan_kaiming_layers() {
+clean_old_kaiming_containers() {
   [[ -x "$KAIMING_BIN" ]] || die "Kaiming command not found"
 
   local qroot="$QUARANTINE_ROOT_BASE/$(date '+%Y%m%d-%H%M%S')"
   declare -A current=()
-  local ref version
-  while read -r ref version; do
-    [[ -n "$ref" && -n "$version" ]] || continue
-    current["$ref|$version"]=1
-  done < <(kaiming_installed_refs)
+  collect_current_kaiming_versions current
 
-  local layer id version_dir version_name rel dest
-  local moved=0
+  local layer arch kind ref module version rel dest
+  local moved=0 skipped=0
   while IFS= read -r layer; do
-    version_name=${layer##*/}
-    id=$(basename "$(dirname "$(dirname "$layer")")")
-    [[ -n "$id" && -n "$version_name" ]] || continue
-    if [[ -n "${current["$id|$version_name"]:-}" ]]; then
+    IFS=$'\t' read -r arch kind ref module version < <(kaiming_layer_fields "$layer") || continue
+    if [[ -n "${current["$ref|$version"]:-}" ]]; then
       continue
     fi
-    if grep -RFl -- "$layer" /proc/*/mountinfo >/dev/null 2>&1; then
-      warn "skip mounted/in-use orphan candidate: $layer"
+    if path_is_mounted_or_in_use "$layer"; then
+      warn "skip mounted/in-use old container candidate: $layer"
+      skipped=$((skipped + 1))
       continue
     fi
     rel=${layer#/var/opt/kaiming/layers/}
     dest="$qroot/$rel"
     if (( APPLY )); then
       install -d -m 0755 "$(dirname "$dest")"
-      log "+ quarantine $layer -> $dest"
+      log "+ quarantine old container $layer -> $dest"
       mv "$layer" "$dest"
     else
-      log "[dry-run] quarantine $layer -> $dest"
+      log "[dry-run] quarantine old container $layer -> $dest"
     fi
     moved=$((moved + 1))
-  done < <(find /var/opt/kaiming/layers/stable -mindepth 5 -maxdepth 5 -type d -printf '%p\n' 2>/dev/null | sort)
+  done < <(kaiming_layer_dirs)
 
   if (( moved == 0 )); then
-    log "No non-current Kaiming version directories found."
+    log "No movable old Kaiming app container version directories found."
+  fi
+  if (( skipped > 0 )); then
+    warn "skipped $skipped mounted/in-use candidates"
   fi
 }
 
@@ -372,16 +417,11 @@ while (($#)); do
     --disable-kaiming-autostart)
       DISABLE_KAIMING_AUTOSTART=1
       ;;
-    --uninstall-kaiming-app)
-      shift
-      [[ $# -gt 0 ]] || die "--uninstall-kaiming-app requires an APPID"
-      UNINSTALL_KAIMING_APPS+=("$1")
-      ;;
-    --uninstall-all-kaiming-apps)
-      UNINSTALL_ALL_KAIMING_APPS=1
+    --clean-old-app-containers)
+      CLEAN_OLD_APP_CONTAINERS=1
       ;;
     --quarantine-orphan-kaiming-layers)
-      QUARANTINE_ORPHAN_KAIMING_LAYERS=1
+      CLEAN_OLD_APP_CONTAINERS=1
       ;;
     --install-monitor)
       INSTALL_MONITOR=1
@@ -409,18 +449,9 @@ report_boot_risk
 report_kaiming
 report_autostart
 
-if (( UNINSTALL_ALL_KAIMING_APPS )); then
-  collect_all_kaiming_apps
-fi
-
-if ((${#UNINSTALL_KAIMING_APPS[@]})); then
-  print_header "action: uninstall kaiming apps"
-  uninstall_kaiming_refs "${UNINSTALL_KAIMING_APPS[@]}"
-fi
-
-if (( QUARANTINE_ORPHAN_KAIMING_LAYERS )); then
-  print_header "action: quarantine orphan kaiming layers"
-  quarantine_orphan_kaiming_layers
+if (( CLEAN_OLD_APP_CONTAINERS )); then
+  print_header "action: clean old kaiming app containers"
+  clean_old_kaiming_containers
 fi
 
 if (( DISABLE_KAIMING_AUTOSTART )); then
