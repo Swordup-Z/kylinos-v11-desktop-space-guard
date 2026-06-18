@@ -402,7 +402,7 @@ public:
             helper_ = QApplication::applicationDirPath() + QStringLiteral("/../libexec/kylin-space-cleaner-helper");
         }
 
-        setMinimumSize(1040, 720);
+        setMinimumSize(1180, 780);
         buildUi();
         applyLanguage();
         QTimer::singleShot(100, this, &CleanerWindow::scanManual);
@@ -689,6 +689,8 @@ private:
         topBar->setSpacing(10);
         title_ = new QLabel;
         title_->setObjectName(QStringLiteral("Title"));
+        title_->setWordWrap(true);
+        title_->setMinimumWidth(260);
         QFont titleFont = title_->font();
         titleFont.setPointSize(titleFont.pointSize() + 8);
         titleFont.setBold(true);
@@ -698,6 +700,8 @@ private:
         language_ = new QComboBox;
         language_->addItem(QStringLiteral("中文"), QStringLiteral("zh"));
         language_->addItem(QStringLiteral("English"), QStringLiteral("en"));
+        language_->setMinimumWidth(116);
+        language_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         connect(language_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CleanerWindow::applyLanguage);
         userLabel_ = new QLabel;
         userValue_ = new QLabel(user_);
@@ -730,6 +734,7 @@ private:
         statusSummary_->setWordWrap(true);
         lastUpdate_ = new QLabel;
         lastUpdate_->setObjectName(QStringLiteral("LastUpdate"));
+        lastUpdate_->setMinimumWidth(128);
         progress_ = new QProgressBar;
         progress_->setObjectName(QStringLiteral("Progress"));
         progress_->setTextVisible(false);
@@ -766,12 +771,15 @@ private:
         metrics_ = new QTableWidget(4, 4);
         metrics_->setObjectName(QStringLiteral("MetricsTable"));
         metrics_->verticalHeader()->hide();
-        metrics_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         metrics_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         metrics_->setSelectionMode(QAbstractItemView::NoSelection);
         metrics_->setAlternatingRowColors(true);
         metrics_->setShowGrid(false);
-        metrics_->verticalHeader()->setDefaultSectionSize(42);
+        configureTable(metrics_);
+        metrics_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        metrics_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+        metrics_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        metrics_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
         metricsLayout->addWidget(metrics_);
         root->addWidget(metricsCard);
 
@@ -787,14 +795,17 @@ private:
         apps_ = new QTableWidget(0, 4);
         apps_->setObjectName(QStringLiteral("AppsTable"));
         apps_->verticalHeader()->hide();
-        apps_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         apps_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         apps_->setSelectionBehavior(QAbstractItemView::SelectRows);
         apps_->setSelectionMode(QAbstractItemView::SingleSelection);
         apps_->setAlternatingRowColors(true);
         apps_->setShowGrid(false);
-        apps_->verticalHeader()->setDefaultSectionSize(36);
-        apps_->setMinimumHeight(150);
+        configureTable(apps_);
+        apps_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        apps_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        apps_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        apps_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+        apps_->setMinimumHeight(230);
         appsLayout->addWidget(apps_);
         root->addWidget(appsCard);
         connect(apps_, &QTableWidget::cellClicked, this, [this](int row, int) {
@@ -842,13 +853,15 @@ private:
         planLayout->addWidget(resultTitle_);
         plan_ = new QTableWidget(0, 3);
         plan_->setObjectName(QStringLiteral("PlanTable"));
-        plan_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         plan_->verticalHeader()->hide();
         plan_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         plan_->setSelectionMode(QAbstractItemView::NoSelection);
         plan_->setAlternatingRowColors(true);
         plan_->setShowGrid(false);
-        plan_->verticalHeader()->setDefaultSectionSize(38);
+        configureTable(plan_);
+        plan_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        plan_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        plan_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
         planLayout->addWidget(plan_, 1);
         root->addWidget(planCard, 1);
 
@@ -904,6 +917,44 @@ private:
                 padding: 8px;
                 font-weight: 700;
             }
+            QTableWidget::item {
+                padding: 7px 8px;
+            }
+            QComboBox {
+                min-height: 34px;
+                padding: 0 30px 0 12px;
+                border-radius: 7px;
+                border: 1px solid #cbd3dd;
+                background: #ffffff;
+                color: #1d1d1f;
+                font-weight: 600;
+            }
+            QComboBox:hover {
+                border-color: #9fb0c2;
+                background: #f7f9fb;
+            }
+            QComboBox::drop-down {
+                width: 26px;
+                border: 0;
+                background: transparent;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                width: 0;
+                height: 0;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 5px solid #3a3d42;
+                margin-right: 8px;
+            }
+            QComboBox QAbstractItemView {
+                border: 1px solid #cbd3dd;
+                background: #ffffff;
+                color: #1d1d1f;
+                selection-background-color: #dce5ee;
+                selection-color: #1d1d1f;
+                outline: 0;
+            }
             QPushButton {
                 min-height: 34px;
                 padding: 0 16px;
@@ -954,11 +1005,12 @@ private:
 
         const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
         for (int row = 0; row < names.size(); ++row) {
-            ensureItem(metrics_, row, 0)->setText(names.at(row));
+            setCell(metrics_, row, 0, names.at(row));
             for (int col = 1; col < 4; ++col) {
-                ensureItem(metrics_, row, col)->setText(state_.isEmpty() ? text.pendingScan : QStringLiteral("-"));
+                setCell(metrics_, row, col, state_.isEmpty() ? text.pendingScan : QStringLiteral("-"));
             }
         }
+        metrics_->resizeRowsToContents();
         if (!state_.isEmpty()) {
             updateMetrics();
             updateApplications();
@@ -973,6 +1025,27 @@ private:
             table->setItem(row, col, new QTableWidgetItem);
         }
         return table->item(row, col);
+    }
+
+    static void configureTable(QTableWidget *table)
+    {
+        table->setWordWrap(true);
+        table->setTextElideMode(Qt::ElideNone);
+        table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        table->horizontalHeader()->setMinimumSectionSize(92);
+        table->horizontalHeader()->setStretchLastSection(false);
+        table->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+        table->verticalHeader()->setMinimumSectionSize(40);
+    }
+
+    static QTableWidgetItem *setCell(QTableWidget *table, int row, int col, const QString &text)
+    {
+        QTableWidgetItem *item = ensureItem(table, row, col);
+        item->setText(text);
+        item->setToolTip(text);
+        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        return item;
     }
 
     static qint64 jsonInt64(const QJsonObject &object, const QString &key)
@@ -1000,9 +1073,10 @@ private:
     {
         const int row = plan_->rowCount();
         plan_->insertRow(row);
-        plan_->setItem(row, 0, new QTableWidgetItem(stage));
-        plan_->setItem(row, 1, new QTableWidgetItem(status));
-        plan_->setItem(row, 2, new QTableWidgetItem(detail));
+        setCell(plan_, row, 0, stage);
+        setCell(plan_, row, 1, status);
+        setCell(plan_, row, 2, detail);
+        plan_->resizeRowsToContents();
         plan_->scrollToBottom();
     }
 
@@ -1095,14 +1169,18 @@ private:
         const qint64 oldContainerBytes = oldContainersBytes();
         for (int row = 0; row < keys.size(); ++row) {
             const qint64 value = jsonInt64(metrics, keys.at(row));
-            ensureItem(metrics_, row, 1)->setText(fmtBytes(value));
-            ensureItem(metrics_, row, 2)->setText(row == 1 ? fmtBytes(oldContainerBytes) : QStringLiteral("-"));
+            setCell(metrics_, row, 1, fmtBytes(value));
+            setCell(metrics_, row, 2, row == 1 ? fmtBytes(oldContainerBytes) : QStringLiteral("-"));
             if (row == 1) {
-                ensureItem(metrics_, row, 3)->setText(oldContainerBytes > 0 ? text.cleanable : text.noCleanable);
+                setCell(metrics_, row, 3, oldContainerBytes > 0 ? text.cleanable : text.noCleanable);
             } else {
-                ensureItem(metrics_, row, 3)->setText(text.normal);
+                setCell(metrics_, row, 3, text.normal);
             }
         }
+        metrics_->resizeColumnsToContents();
+        metrics_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+        metrics_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+        metrics_->resizeRowsToContents();
     }
 
     void updateApplications()
@@ -1111,11 +1189,12 @@ private:
         apps_->setRowCount(applications.size());
         for (int row = 0; row < applications.size(); ++row) {
             const QJsonObject app = applications.at(row).toObject();
-            ensureItem(apps_, row, 0)->setText(app.value(QStringLiteral("ref")).toString());
-            ensureItem(apps_, row, 1)->setText(app.value(QStringLiteral("kind")).toString());
-            ensureItem(apps_, row, 2)->setText(QString::number(app.value(QStringLiteral("containerCount")).toInt()));
-            ensureItem(apps_, row, 3)->setText(fmtBytes(jsonInt64(app, QStringLiteral("bytes"))));
+            setCell(apps_, row, 0, app.value(QStringLiteral("ref")).toString());
+            setCell(apps_, row, 1, app.value(QStringLiteral("kind")).toString());
+            setCell(apps_, row, 2, QString::number(app.value(QStringLiteral("containerCount")).toInt()));
+            setCell(apps_, row, 3, fmtBytes(jsonInt64(app, QStringLiteral("bytes"))));
         }
+        apps_->resizeRowsToContents();
     }
 
     void showApplicationContainers(int row)
@@ -1134,22 +1213,29 @@ private:
         auto *layout = new QVBoxLayout(&dialog);
         auto *table = new QTableWidget(containers.size(), 6);
         table->setHorizontalHeaderLabels({text.module, text.version, text.appSize, text.currentLayer, text.inUse, text.path});
-        table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         table->verticalHeader()->hide();
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
         table->setAlternatingRowColors(true);
         table->setShowGrid(false);
+        configureTable(table);
+        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
         for (int i = 0; i < containers.size(); ++i) {
             const QJsonObject item = containers.at(i).toObject();
-            table->setItem(i, 0, new QTableWidgetItem(item.value(QStringLiteral("module")).toString()));
-            table->setItem(i, 1, new QTableWidgetItem(item.value(QStringLiteral("version")).toString()));
-            table->setItem(i, 2, new QTableWidgetItem(fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
-            table->setItem(i, 3, new QTableWidgetItem(item.value(QStringLiteral("current")).toBool() ? text.active : text.disabled));
-            table->setItem(i, 4, new QTableWidgetItem(item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled));
-            table->setItem(i, 5, new QTableWidgetItem(item.value(QStringLiteral("path")).toString()));
+            setCell(table, i, 0, item.value(QStringLiteral("module")).toString());
+            setCell(table, i, 1, item.value(QStringLiteral("version")).toString());
+            setCell(table, i, 2, fmtBytes(jsonInt64(item, QStringLiteral("bytes"))));
+            setCell(table, i, 3, item.value(QStringLiteral("current")).toBool() ? text.active : text.disabled);
+            setCell(table, i, 4, item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled);
+            setCell(table, i, 5, item.value(QStringLiteral("path")).toString());
         }
-        table->setMinimumSize(840, 320);
+        table->resizeRowsToContents();
+        table->setMinimumSize(980, 420);
         layout->addWidget(table);
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok);
         localizeDialogButtons(buttons);
