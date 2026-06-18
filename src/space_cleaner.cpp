@@ -206,16 +206,28 @@ public:
         update();
     }
 
+    void setInteractive(bool interactive)
+    {
+        interactive_ = interactive;
+        if (!interactive_) {
+            animateTo(0.0);
+        }
+    }
+
 protected:
     void enterEvent(QEvent *event) override
     {
-        animateTo(1.0);
+        if (interactive_) {
+            animateTo(1.0);
+        }
         QFrame::enterEvent(event);
     }
 
     void leaveEvent(QEvent *event) override
     {
-        animateTo(0.0);
+        if (interactive_) {
+            animateTo(0.0);
+        }
         QFrame::leaveEvent(event);
     }
 
@@ -246,6 +258,7 @@ private:
     }
 
     qreal hover_ = 0.0;
+    bool interactive_ = true;
     QPropertyAnimation *hoverAnimation_ = nullptr;
 };
 
@@ -403,7 +416,7 @@ private:
         QString intro;
         QString scan;
         QString cleanOld;
-        QString disableAutostart;
+        QString manageAutostart;
         QString installMonitor;
         QString metric;
         QString before;
@@ -438,6 +451,25 @@ private:
         QString resultTitle;
         QString ok;
         QString cancel;
+        QString pendingScan;
+        QString scanTime;
+        QString cleanable;
+        QString metricStatus;
+        QString normal;
+        QString noCleanable;
+        QString active;
+        QString disabled;
+        QString applicationsTitle;
+        QString appName;
+        QString appKind;
+        QString appContainers;
+        QString appSize;
+        QString containerDetails;
+        QString module;
+        QString version;
+        QString path;
+        QString currentLayer;
+        QString inUse;
     };
 
     static Text zh()
@@ -449,12 +481,12 @@ private:
             QStringLiteral("先扫描，再选择要执行的清理或抑制动作。执行前会展示计划，执行后会展示结果。"),
             QStringLiteral("扫描"),
             QStringLiteral("清理旧容器"),
-            QStringLiteral("禁用预热/自启动"),
+            QStringLiteral("管理预热/自启动"),
             QStringLiteral("安装监控"),
             QStringLiteral("项目"),
-            QStringLiteral("执行前"),
-            QStringLiteral("已释放"),
             QStringLiteral("当前占用"),
+            QStringLiteral("可清理"),
+            QStringLiteral("状态"),
             QStringLiteral("根分区已用"),
             QStringLiteral("Kaiming"),
             QStringLiteral("ostree 写入层"),
@@ -468,14 +500,14 @@ private:
             QStringLiteral("完成"),
             QStringLiteral("失败"),
             QStringLiteral("计划"),
-            QStringLiteral("选择要禁用的自启动项"),
+            QStringLiteral("管理预热/自启动项"),
             QStringLiteral("选择要清理的旧版本容器"),
-            QStringLiteral("当前没有可禁用的自启动项，或都已经禁用。"),
+            QStringLiteral("当前没有发现可管理的预热/自启动项。"),
             QStringLiteral("当前没有发现可安全清理的旧版本容器。"),
             QStringLiteral("错误"),
-            QStringLiteral("实时状态"),
+            QStringLiteral("当前状态"),
             QStringLiteral("正在更新"),
-            QStringLiteral("已更新"),
+            QStringLiteral("扫描时间"),
             QStringLiteral("启动时自动扫描一次；后续可手动重新扫描"),
             QStringLiteral("操作失败"),
             QStringLiteral("操作未完成。错误详情已写入："),
@@ -483,7 +515,26 @@ private:
             QStringLiteral("可执行操作"),
             QStringLiteral("执行结果"),
             QStringLiteral("确定"),
-            QStringLiteral("取消")
+            QStringLiteral("取消"),
+            QStringLiteral("等待扫描"),
+            QStringLiteral("扫描时间"),
+            QStringLiteral("可清理"),
+            QStringLiteral("状态"),
+            QStringLiteral("正常"),
+            QStringLiteral("暂无安全清理项"),
+            QStringLiteral("启用"),
+            QStringLiteral("禁用"),
+            QStringLiteral("应用容器"),
+            QStringLiteral("应用"),
+            QStringLiteral("类型"),
+            QStringLiteral("容器数"),
+            QStringLiteral("总占用"),
+            QStringLiteral("容器明细"),
+            QStringLiteral("模块"),
+            QStringLiteral("版本"),
+            QStringLiteral("路径"),
+            QStringLiteral("当前引用"),
+            QStringLiteral("使用中")
         };
     }
 
@@ -496,12 +547,12 @@ private:
             QStringLiteral("Scan first, then choose cleanup or suppression actions. The app shows the plan before execution and the result afterwards."),
             QStringLiteral("Scan"),
             QStringLiteral("Clean Old Containers"),
-            QStringLiteral("Disable Preheat/Autostart"),
+            QStringLiteral("Manage Preheat/Autostart"),
             QStringLiteral("Install Monitor"),
             QStringLiteral("Item"),
-            QStringLiteral("Before"),
-            QStringLiteral("Released"),
-            QStringLiteral("Current"),
+            QStringLiteral("Current Usage"),
+            QStringLiteral("Cleanable"),
+            QStringLiteral("Status"),
             QStringLiteral("Root Used"),
             QStringLiteral("Kaiming"),
             QStringLiteral("ostree Upper"),
@@ -515,14 +566,14 @@ private:
             QStringLiteral("Done"),
             QStringLiteral("Failed"),
             QStringLiteral("Plan"),
-            QStringLiteral("Select autostart entries to disable"),
+            QStringLiteral("Manage preheat/autostart entries"),
             QStringLiteral("Select old container versions to clean"),
-            QStringLiteral("No active autostart entries can be disabled, or all are already disabled."),
+            QStringLiteral("No manageable preheat/autostart entries were found."),
             QStringLiteral("No safely cleanable old container versions were found."),
             QStringLiteral("Error"),
-            QStringLiteral("Live Status"),
+            QStringLiteral("Current Status"),
             QStringLiteral("Updating"),
-            QStringLiteral("Updated"),
+            QStringLiteral("Scan Time"),
             QStringLiteral("Scans once at startup. Use Scan to refresh manually."),
             QStringLiteral("Operation Failed"),
             QStringLiteral("The operation did not complete. Error details were written to:"),
@@ -530,7 +581,26 @@ private:
             QStringLiteral("Actions"),
             QStringLiteral("Results"),
             QStringLiteral("OK"),
-            QStringLiteral("Cancel")
+            QStringLiteral("Cancel"),
+            QStringLiteral("Waiting for scan"),
+            QStringLiteral("Scan Time"),
+            QStringLiteral("Cleanable"),
+            QStringLiteral("Status"),
+            QStringLiteral("Normal"),
+            QStringLiteral("No safe cleanup candidates"),
+            QStringLiteral("Enabled"),
+            QStringLiteral("Disabled"),
+            QStringLiteral("Application Containers"),
+            QStringLiteral("Application"),
+            QStringLiteral("Type"),
+            QStringLiteral("Containers"),
+            QStringLiteral("Total Size"),
+            QStringLiteral("Container Details"),
+            QStringLiteral("Module"),
+            QStringLiteral("Version"),
+            QStringLiteral("Path"),
+            QStringLiteral("Current"),
+            QStringLiteral("In Use")
         };
     }
 
@@ -672,14 +742,21 @@ private:
         statusLayout->addWidget(progress_);
         copy->addWidget(statusFrame);
         copy->addStretch(1);
+        auto *visualCard = new CardFrame;
+        visualCard->setObjectName(QStringLiteral("VisualCard"));
+        visualCard->setInteractive(false);
+        auto *visualLayout = new QVBoxLayout(visualCard);
+        visualLayout->setContentsMargins(10, 10, 10, 10);
         visual_ = new SpaceVisual;
+        visualLayout->addWidget(visual_);
         body->addLayout(copy, 1);
-        body->addWidget(visual_, 0, Qt::AlignRight | Qt::AlignVCenter);
+        body->addWidget(visualCard, 0, Qt::AlignRight | Qt::AlignVCenter);
         header->addLayout(body);
         root->addWidget(headerFrame);
 
         auto *metricsCard = new CardFrame;
         metricsCard->setObjectName(QStringLiteral("CardFrame"));
+        metricsCard->setInteractive(false);
         auto *metricsLayout = new QVBoxLayout(metricsCard);
         metricsLayout->setContentsMargins(16, 14, 16, 16);
         metricsLayout->setSpacing(10);
@@ -698,8 +775,35 @@ private:
         metricsLayout->addWidget(metrics_);
         root->addWidget(metricsCard);
 
+        auto *appsCard = new CardFrame;
+        appsCard->setObjectName(QStringLiteral("CardFrame"));
+        appsCard->setInteractive(false);
+        auto *appsLayout = new QVBoxLayout(appsCard);
+        appsLayout->setContentsMargins(16, 14, 16, 16);
+        appsLayout->setSpacing(10);
+        appsTitle_ = new QLabel;
+        appsTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        appsLayout->addWidget(appsTitle_);
+        apps_ = new QTableWidget(0, 4);
+        apps_->setObjectName(QStringLiteral("AppsTable"));
+        apps_->verticalHeader()->hide();
+        apps_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        apps_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        apps_->setSelectionBehavior(QAbstractItemView::SelectRows);
+        apps_->setSelectionMode(QAbstractItemView::SingleSelection);
+        apps_->setAlternatingRowColors(true);
+        apps_->setShowGrid(false);
+        apps_->verticalHeader()->setDefaultSectionSize(36);
+        apps_->setMinimumHeight(150);
+        appsLayout->addWidget(apps_);
+        root->addWidget(appsCard);
+        connect(apps_, &QTableWidget::cellClicked, this, [this](int row, int) {
+            showApplicationContainers(row);
+        });
+
         auto *actionsCard = new CardFrame;
         actionsCard->setObjectName(QStringLiteral("CardFrame"));
+        actionsCard->setInteractive(false);
         auto *actionsCardLayout = new QVBoxLayout(actionsCard);
         actionsCardLayout->setContentsMargins(16, 14, 16, 16);
         actionsCardLayout->setSpacing(10);
@@ -729,6 +833,7 @@ private:
 
         auto *planCard = new CardFrame;
         planCard->setObjectName(QStringLiteral("CardFrame"));
+        planCard->setInteractive(false);
         auto *planLayout = new QVBoxLayout(planCard);
         planLayout->setContentsMargins(16, 14, 16, 16);
         planLayout->setSpacing(10);
@@ -785,7 +890,7 @@ private:
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #1d1d1f, stop:1 #66798b);
             }
-            QTableWidget#MetricsTable, QTableWidget#PlanTable {
+            QTableWidget#MetricsTable, QTableWidget#AppsTable, QTableWidget#PlanTable {
                 border: 1px solid #d9dfe7;
                 border-radius: 8px;
                 background: #ffffff;
@@ -836,12 +941,14 @@ private:
         statusTitle_->setText(text.live);
         scanButton_->setText(text.scan);
         cleanOldButton_->setText(text.cleanOld);
-        autostartButton_->setText(text.disableAutostart);
+        autostartButton_->setText(text.manageAutostart);
         monitorButton_->setText(text.installMonitor);
         metricsTitle_->setText(text.metricsTitle);
+        appsTitle_->setText(text.applicationsTitle);
         actionsTitle_->setText(text.actionsTitle);
         resultTitle_->setText(text.resultTitle);
-        metrics_->setHorizontalHeaderLabels({text.metric, text.before, text.released, text.current});
+        metrics_->setHorizontalHeaderLabels({text.metric, text.current, text.cleanable, text.metricStatus});
+        apps_->setHorizontalHeaderLabels({text.appName, text.appKind, text.appContainers, text.appSize});
         plan_->setHorizontalHeaderLabels({text.stage, text.status, text.detail});
         updateStatusSummary();
 
@@ -849,10 +956,14 @@ private:
         for (int row = 0; row < names.size(); ++row) {
             ensureItem(metrics_, row, 0)->setText(names.at(row));
             for (int col = 1; col < 4; ++col) {
-                if (!metrics_->item(row, col)) {
-                    metrics_->setItem(row, col, new QTableWidgetItem(QStringLiteral("-")));
-                }
+                ensureItem(metrics_, row, col)->setText(state_.isEmpty() ? text.pendingScan : QStringLiteral("-"));
             }
+        }
+        if (!state_.isEmpty()) {
+            updateMetrics();
+            updateApplications();
+        } else {
+            apps_->setRowCount(0);
         }
     }
 
@@ -951,6 +1062,7 @@ private:
             }
             state_ = doc.object();
             updateMetrics();
+            updateApplications();
             updateStatusSummary();
             if (manual) {
                 addPlanRow(text.scan, text.done, scanSummary());
@@ -977,14 +1089,82 @@ private:
 
     void updateMetrics()
     {
+        const Text text = t();
         const QJsonObject metrics = state_.value(QStringLiteral("metrics")).toObject();
         const QStringList keys{QStringLiteral("root_used"), QStringLiteral("kaiming"), QStringLiteral("ostree_upper"), QStringLiteral("kare_upper")};
+        const qint64 oldContainerBytes = oldContainersBytes();
         for (int row = 0; row < keys.size(); ++row) {
             const qint64 value = jsonInt64(metrics, keys.at(row));
             ensureItem(metrics_, row, 1)->setText(fmtBytes(value));
-            ensureItem(metrics_, row, 2)->setText(QStringLiteral("-"));
-            ensureItem(metrics_, row, 3)->setText(fmtBytes(value));
+            ensureItem(metrics_, row, 2)->setText(row == 1 ? fmtBytes(oldContainerBytes) : QStringLiteral("-"));
+            if (row == 1) {
+                ensureItem(metrics_, row, 3)->setText(oldContainerBytes > 0 ? text.cleanable : text.noCleanable);
+            } else {
+                ensureItem(metrics_, row, 3)->setText(text.normal);
+            }
         }
+    }
+
+    void updateApplications()
+    {
+        const QJsonArray applications = state_.value(QStringLiteral("applications")).toArray();
+        apps_->setRowCount(applications.size());
+        for (int row = 0; row < applications.size(); ++row) {
+            const QJsonObject app = applications.at(row).toObject();
+            ensureItem(apps_, row, 0)->setText(app.value(QStringLiteral("ref")).toString());
+            ensureItem(apps_, row, 1)->setText(app.value(QStringLiteral("kind")).toString());
+            ensureItem(apps_, row, 2)->setText(QString::number(app.value(QStringLiteral("containerCount")).toInt()));
+            ensureItem(apps_, row, 3)->setText(fmtBytes(jsonInt64(app, QStringLiteral("bytes"))));
+        }
+    }
+
+    void showApplicationContainers(int row)
+    {
+        const QJsonArray applications = state_.value(QStringLiteral("applications")).toArray();
+        if (row < 0 || row >= applications.size()) {
+            return;
+        }
+        const Text text = t();
+        const QJsonObject app = applications.at(row).toObject();
+        const QJsonArray containers = app.value(QStringLiteral("containers")).toArray();
+
+        QDialog dialog(this);
+        dialog.setStyleSheet(styleSheet());
+        dialog.setWindowTitle(text.containerDetails + QStringLiteral(" - ") + app.value(QStringLiteral("ref")).toString());
+        auto *layout = new QVBoxLayout(&dialog);
+        auto *table = new QTableWidget(containers.size(), 6);
+        table->setHorizontalHeaderLabels({text.module, text.version, text.appSize, text.currentLayer, text.inUse, text.path});
+        table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        table->verticalHeader()->hide();
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->setSelectionBehavior(QAbstractItemView::SelectRows);
+        table->setAlternatingRowColors(true);
+        table->setShowGrid(false);
+        for (int i = 0; i < containers.size(); ++i) {
+            const QJsonObject item = containers.at(i).toObject();
+            table->setItem(i, 0, new QTableWidgetItem(item.value(QStringLiteral("module")).toString()));
+            table->setItem(i, 1, new QTableWidgetItem(item.value(QStringLiteral("version")).toString()));
+            table->setItem(i, 2, new QTableWidgetItem(fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
+            table->setItem(i, 3, new QTableWidgetItem(item.value(QStringLiteral("current")).toBool() ? text.active : text.disabled));
+            table->setItem(i, 4, new QTableWidgetItem(item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled));
+            table->setItem(i, 5, new QTableWidgetItem(item.value(QStringLiteral("path")).toString()));
+        }
+        table->setMinimumSize(840, 320);
+        layout->addWidget(table);
+        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok);
+        localizeDialogButtons(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        layout->addWidget(buttons);
+        dialog.exec();
+    }
+
+    qint64 oldContainersBytes() const
+    {
+        qint64 total = 0;
+        for (const QJsonValue &value : state_.value(QStringLiteral("oldContainers")).toArray()) {
+            total += jsonInt64(value.toObject(), QStringLiteral("bytes"));
+        }
+        return total;
     }
 
     void updateStatusSummary()
@@ -1001,7 +1181,7 @@ private:
         const QDateTime parsed = QDateTime::fromString(time, Qt::ISODate);
         const QString stamp = parsed.isValid() ? parsed.toLocalTime().toString(QStringLiteral("HH:mm:ss"))
                                                : QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
-        lastUpdate_->setText(t().updated + QStringLiteral(" ") + stamp);
+        lastUpdate_->setText(t().scanTime + QStringLiteral(" ") + stamp);
     }
 
     void animateRefresh()
@@ -1023,6 +1203,7 @@ private:
     {
         const QJsonArray entries = state_.value(QStringLiteral("autostarts")).toArray();
         QVector<QPair<QString, QCheckBox *>> boxes;
+        QVector<bool> initialEnabled;
         QDialog dialog(this);
         dialog.setStyleSheet(styleSheet());
         dialog.setWindowTitle(t().selectAutostarts);
@@ -1033,18 +1214,19 @@ private:
 
         for (const QJsonValue &value : entries) {
             const QJsonObject item = value.toObject();
-            if (item.value(QStringLiteral("disabled")).toBool()) {
-                continue;
-            }
+            const bool enabled = !item.value(QStringLiteral("disabled")).toBool();
             auto *box = new QCheckBox(localName(item));
-            box->setChecked(true);
+            box->setChecked(enabled);
             box->setToolTip(localDescription(item));
             list->addWidget(box);
-            auto *detail = new QLabel(localDescription(item) + QStringLiteral("\n") + item.value(QStringLiteral("target")).toString());
+            auto *detail = new QLabel((enabled ? t().active : t().disabled) + QStringLiteral(" · ")
+                                      + localDescription(item) + QStringLiteral("\n")
+                                      + item.value(QStringLiteral("target")).toString());
             detail->setWordWrap(true);
             detail->setContentsMargins(26, 0, 0, 8);
             list->addWidget(detail);
             boxes.append({item.value(QStringLiteral("id")).toString(), box});
+            initialEnabled.append(enabled);
         }
         list->addStretch(1);
         scroll->setWidget(container);
@@ -1063,16 +1245,23 @@ private:
         if (dialog.exec() != QDialog::Accepted) {
             return;
         }
-        QStringList selected;
-        for (const auto &pair : boxes) {
-            if (pair.second->isChecked()) {
-                selected << pair.first;
+        QStringList enableIds;
+        QStringList disableIds;
+        for (int i = 0; i < boxes.size(); ++i) {
+            const bool enabled = boxes.at(i).second->isChecked();
+            if (enabled == initialEnabled.at(i)) {
+                continue;
+            }
+            if (enabled) {
+                enableIds << boxes.at(i).first;
+            } else {
+                disableIds << boxes.at(i).first;
             }
         }
-        if (selected.isEmpty()) {
+        if (enableIds.isEmpty() && disableIds.isEmpty()) {
             return;
         }
-        applyAutostart(selected);
+        applyAutostartChanges(disableIds, enableIds);
     }
 
     void showContainerDialog()
@@ -1142,14 +1331,16 @@ private:
             : item.value(QStringLiteral("descriptionZh")).toString();
     }
 
-    void applyAutostart(const QStringList &ids)
+    void applyAutostartChanges(const QStringList &disableIds, const QStringList &enableIds)
     {
         const Text text = t();
         setBusy(true);
         addPlanRow(text.planned, text.running, language_->currentData().toString() == QStringLiteral("en")
-            ? QStringLiteral("Write Hidden=true overrides for %1 selected entries.").arg(ids.size())
-            : QStringLiteral("为 %1 个选中的自启动项写入 Hidden=true 覆盖。").arg(ids.size()));
-        runProcess({helper_, QStringLiteral("--apply-autostart"), QStringLiteral("--user"), user_, QStringLiteral("--entries"), ids.join(QLatin1Char(','))},
+            ? QStringLiteral("Apply %1 disable and %2 enable autostart changes.").arg(disableIds.size()).arg(enableIds.size())
+            : QStringLiteral("应用 %1 个禁用、%2 个启用的自启动变更。").arg(disableIds.size()).arg(enableIds.size()));
+        runProcess({helper_, QStringLiteral("--manage-autostart"), QStringLiteral("--user"), user_,
+                    QStringLiteral("--disable-entries"), disableIds.join(QLatin1Char(',')),
+                    QStringLiteral("--enable-entries"), enableIds.join(QLatin1Char(','))},
                    [this](int code, const QByteArray &output) {
             handleActionResult(code, output);
         });
@@ -1293,9 +1484,11 @@ private:
     QProgressBar *progress_ = nullptr;
     SpaceVisual *visual_ = nullptr;
     QLabel *metricsTitle_ = nullptr;
+    QLabel *appsTitle_ = nullptr;
     QLabel *actionsTitle_ = nullptr;
     QLabel *resultTitle_ = nullptr;
     QTableWidget *metrics_ = nullptr;
+    QTableWidget *apps_ = nullptr;
     QTableWidget *plan_ = nullptr;
     QPushButton *scanButton_ = nullptr;
     QPushButton *cleanOldButton_ = nullptr;

@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
@@ -133,9 +134,17 @@ static bool parseLayerPath(const QString &path, QString *kind, QString *ref, QSt
     return !parts.at(1).isEmpty() && !parts.at(2).isEmpty() && !parts.at(4).isEmpty();
 }
 
-static QSet<QString> currentLayerKeys()
+static QString normalizeKaimingLayerPath(QString path)
 {
-    QSet<QString> keys;
+    if (path.startsWith(QStringLiteral("/opt/kaiming/"))) {
+        path.replace(QStringLiteral("/opt/kaiming/"), QStringLiteral("/var/opt/kaiming/"));
+    }
+    return path;
+}
+
+static QSet<QString> currentLayerPaths()
+{
+    QSet<QString> paths;
     const QDir infoDir(QStringLiteral("/var/opt/kaiming/info"));
     const QStringList files = infoDir.entryList({QStringLiteral("*.list")}, QDir::Files);
     for (const QString &fileName : files) {
@@ -148,17 +157,17 @@ static QSet<QString> currentLayerKeys()
             if (!line.startsWith(QStringLiteral("/opt/kaiming/layers/stable/"))) {
                 continue;
             }
-            line.replace(QStringLiteral("/opt/kaiming/"), QStringLiteral("/var/opt/kaiming/"));
+            line = normalizeKaimingLayerPath(line);
             QString kind;
             QString ref;
             QString module;
             QString version;
             if (parseLayerPath(line, &kind, &ref, &module, &version)) {
-                keys.insert(ref + QLatin1Char('|') + version);
+                paths.insert(line);
             }
         }
     }
-    return keys;
+    return paths;
 }
 
 static bool pathInUse(const QString &path)
@@ -185,7 +194,7 @@ static bool pathInUse(const QString &path)
 static QJsonArray oldContainerCandidates()
 {
     QJsonArray array;
-    const QSet<QString> current = currentLayerKeys();
+    const QSet<QString> current = currentLayerPaths();
     for (const QString &path : findLayerDirs()) {
         QString kind;
         QString ref;
@@ -194,7 +203,7 @@ static QJsonArray oldContainerCandidates()
         if (!parseLayerPath(path, &kind, &ref, &module, &version)) {
             continue;
         }
-        if (current.contains(ref + QLatin1Char('|') + version)) {
+        if (current.contains(path)) {
             continue;
         }
         QJsonObject item;
@@ -205,6 +214,59 @@ static QJsonArray oldContainerCandidates()
         item.insert(QStringLiteral("version"), version);
         item.insert(QStringLiteral("bytes"), QString::number(duBytes(path)));
         item.insert(QStringLiteral("inUse"), pathInUse(path));
+        array.append(item);
+    }
+    return array;
+}
+
+static QJsonArray applicationContainers()
+{
+    struct AppInfo {
+        QString ref;
+        QString kind;
+        qint64 bytes = 0;
+        QJsonArray layers;
+    };
+
+    QMap<QString, AppInfo> apps;
+    const QSet<QString> current = currentLayerPaths();
+    for (const QString &path : findLayerDirs()) {
+        QString kind;
+        QString ref;
+        QString module;
+        QString version;
+        if (!parseLayerPath(path, &kind, &ref, &module, &version)) {
+            continue;
+        }
+        const qint64 bytes = duBytes(path);
+        const QString key = kind + QLatin1Char('|') + ref;
+        if (!apps.contains(key)) {
+            AppInfo info;
+            info.ref = ref;
+            info.kind = kind;
+            apps.insert(key, info);
+        }
+        QJsonObject layer;
+        layer.insert(QStringLiteral("path"), path);
+        layer.insert(QStringLiteral("kind"), kind);
+        layer.insert(QStringLiteral("ref"), ref);
+        layer.insert(QStringLiteral("module"), module);
+        layer.insert(QStringLiteral("version"), version);
+        layer.insert(QStringLiteral("bytes"), QString::number(bytes));
+        layer.insert(QStringLiteral("current"), current.contains(path));
+        layer.insert(QStringLiteral("inUse"), pathInUse(path));
+        apps[key].bytes += bytes;
+        apps[key].layers.append(layer);
+    }
+
+    QJsonArray array;
+    for (const AppInfo &app : apps) {
+        QJsonObject item;
+        item.insert(QStringLiteral("ref"), app.ref);
+        item.insert(QStringLiteral("kind"), app.kind);
+        item.insert(QStringLiteral("bytes"), QString::number(app.bytes));
+        item.insert(QStringLiteral("containers"), app.layers);
+        item.insert(QStringLiteral("containerCount"), app.layers.size());
         array.append(item);
     }
     return array;
@@ -349,13 +411,14 @@ static QJsonObject scan(const QString &user)
     root.insert(QStringLiteral("metrics"), metrics);
     root.insert(QStringLiteral("oldContainers"), oldContainersFuture.get());
     root.insert(QStringLiteral("autostarts"), autostartsFuture.get());
+    root.insert(QStringLiteral("applications"), applicationContainers());
     root.insert(QStringLiteral("mode"), runCapture(QStringLiteral("mm-cli"), {QStringLiteral("-s")}).trimmed());
     root.insert(QStringLiteral("user"), user);
     root.insert(QStringLiteral("time"), QDateTime::currentDateTime().toString(Qt::ISODate));
     return root;
 }
 
-static int applyAutostart(const QString &user, const QStringList &ids)
+static int manageAutostart(const QString &user, const QStringList &disableIds, const QStringList &enableIds)
 {
     const QString home = homeForUser(user);
     const QJsonArray candidates = autostartCandidates(user);
@@ -366,9 +429,10 @@ static int applyAutostart(const QString &user, const QStringList &ids)
 
     QJsonArray results;
     QDir().mkpath(home + QStringLiteral("/.config/autostart"));
-    for (const QString &id : ids) {
+    for (const QString &id : disableIds) {
         QJsonObject item;
         item.insert(QStringLiteral("id"), id);
+        item.insert(QStringLiteral("targetState"), QStringLiteral("disabled"));
         if (!valid.contains(id)) {
             item.insert(QStringLiteral("ok"), false);
             item.insert(QStringLiteral("message"), QStringLiteral("not a known active autostart entry"));
@@ -395,9 +459,32 @@ static int applyAutostart(const QString &user, const QStringList &ids)
         item.insert(QStringLiteral("target"), target);
         results.append(item);
     }
+    for (const QString &id : enableIds) {
+        QJsonObject item;
+        item.insert(QStringLiteral("id"), id);
+        item.insert(QStringLiteral("targetState"), QStringLiteral("enabled"));
+        if (!valid.contains(id)) {
+            item.insert(QStringLiteral("ok"), false);
+            item.insert(QStringLiteral("message"), QStringLiteral("not a known autostart entry"));
+            results.append(item);
+            continue;
+        }
+        const QString target = home + QStringLiteral("/.config/autostart/") + id;
+        QFile file(target);
+        bool ok = true;
+        QString message = QStringLiteral("already inherited from system autostart");
+        if (QFileInfo::exists(target)) {
+            ok = file.remove();
+            message = ok ? QStringLiteral("user Hidden=true override removed") : file.errorString();
+        }
+        item.insert(QStringLiteral("ok"), ok);
+        item.insert(QStringLiteral("message"), message);
+        item.insert(QStringLiteral("target"), target);
+        results.append(item);
+    }
 
     QJsonObject root;
-    root.insert(QStringLiteral("action"), QStringLiteral("applyAutostart"));
+    root.insert(QStringLiteral("action"), QStringLiteral("manageAutostart"));
     root.insert(QStringLiteral("results"), results);
     QTextStream(stdout) << QJsonDocument(root).toJson(QJsonDocument::Compact) << Qt::endl;
     return 0;
@@ -431,7 +518,7 @@ static int applyOldContainers(const QStringList &paths)
         return 2;
     }
 
-    const QSet<QString> current = currentLayerKeys();
+    const QSet<QString> current = currentLayerPaths();
     const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
     const QString qroot = kQuarantineRoot + QLatin1Char('/') + stamp;
     QJsonArray results;
@@ -448,7 +535,7 @@ static int applyOldContainers(const QStringList &paths)
             results.append(item);
             continue;
         }
-        if (current.contains(ref + QLatin1Char('|') + version)) {
+        if (current.contains(path)) {
             item.insert(QStringLiteral("ok"), false);
             item.insert(QStringLiteral("message"), QStringLiteral("path is still listed as current"));
             results.append(item);
@@ -485,9 +572,12 @@ int main(int argc, char **argv)
     const QStringList args = app.arguments();
     QString user = currentUser();
     QStringList entries;
+    QStringList disableEntries;
+    QStringList enableEntries;
     QStringList containers;
     bool doScan = args.contains(QStringLiteral("--scan"));
     bool doAutostart = args.contains(QStringLiteral("--apply-autostart"));
+    bool doManageAutostart = args.contains(QStringLiteral("--manage-autostart"));
     bool doContainers = args.contains(QStringLiteral("--apply-old-containers"));
 
     for (int i = 1; i < args.size(); ++i) {
@@ -495,18 +585,25 @@ int main(int argc, char **argv)
             user = args.at(++i);
         } else if (args.at(i) == QStringLiteral("--entries") && i + 1 < args.size()) {
             entries = args.at(++i).split(QLatin1Char(','), Qt::SkipEmptyParts);
+        } else if (args.at(i) == QStringLiteral("--disable-entries") && i + 1 < args.size()) {
+            disableEntries = args.at(++i).split(QLatin1Char(','), Qt::SkipEmptyParts);
+        } else if (args.at(i) == QStringLiteral("--enable-entries") && i + 1 < args.size()) {
+            enableEntries = args.at(++i).split(QLatin1Char(','), Qt::SkipEmptyParts);
         } else if (args.at(i) == QStringLiteral("--container") && i + 1 < args.size()) {
             containers << args.at(++i);
         }
     }
 
     if (doAutostart) {
-        return applyAutostart(user, entries);
+        return manageAutostart(user, entries, {});
+    }
+    if (doManageAutostart) {
+        return manageAutostart(user, disableEntries, enableEntries);
     }
     if (doContainers) {
         return applyOldContainers(containers);
     }
-    if (!doScan && !doAutostart && !doContainers) {
+    if (!doScan && !doAutostart && !doManageAutostart && !doContainers) {
         doScan = true;
     }
 
