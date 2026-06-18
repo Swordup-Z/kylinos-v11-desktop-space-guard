@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QProcess>
@@ -173,12 +174,212 @@ private:
     QPropertyAnimation *activityAnimation_ = nullptr;
 };
 
+static QColor mixedColor(const QColor &a, const QColor &b, qreal t)
+{
+    t = qBound<qreal>(0.0, t, 1.0);
+    return QColor(static_cast<int>(a.red() + (b.red() - a.red()) * t),
+                  static_cast<int>(a.green() + (b.green() - a.green()) * t),
+                  static_cast<int>(a.blue() + (b.blue() - a.blue()) * t),
+                  static_cast<int>(a.alpha() + (b.alpha() - a.alpha()) * t));
+}
+
+class CardFrame : public QFrame {
+    Q_OBJECT
+    Q_PROPERTY(qreal hover READ hover WRITE setHover)
+
+public:
+    explicit CardFrame(QWidget *parent = nullptr)
+        : QFrame(parent)
+    {
+        setAttribute(Qt::WA_Hover, true);
+        setAutoFillBackground(false);
+        hoverAnimation_ = new QPropertyAnimation(this, "hover", this);
+        hoverAnimation_->setDuration(180);
+        hoverAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    }
+
+    qreal hover() const { return hover_; }
+
+    void setHover(qreal hover)
+    {
+        hover_ = hover;
+        update();
+    }
+
+protected:
+    void enterEvent(QEvent *event) override
+    {
+        animateTo(1.0);
+        QFrame::enterEvent(event);
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        animateTo(0.0);
+        QFrame::leaveEvent(event);
+    }
+
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QRectF rect = QRectF(0.5, 0.5, width() - 1, height() - 1);
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(28, 31, 36, 10 + static_cast<int>(10 * hover_)));
+        painter.drawRoundedRect(rect.adjusted(1, 3 + hover_, -1, -1), 8, 8);
+
+        const QColor background = mixedColor(QColor(255, 255, 255), QColor(248, 251, 253), hover_);
+        const QColor border = mixedColor(QColor(217, 223, 231), QColor(155, 173, 190), hover_);
+        painter.setBrush(background);
+        painter.setPen(QPen(border, 1));
+        painter.drawRoundedRect(rect.adjusted(0, 0, 0, -2), 8, 8);
+    }
+
+private:
+    void animateTo(qreal target)
+    {
+        hoverAnimation_->stop();
+        hoverAnimation_->setStartValue(hover_);
+        hoverAnimation_->setEndValue(target);
+        hoverAnimation_->start();
+    }
+
+    qreal hover_ = 0.0;
+    QPropertyAnimation *hoverAnimation_ = nullptr;
+};
+
+class AnimatedButton : public QPushButton {
+    Q_OBJECT
+    Q_PROPERTY(qreal hover READ hover WRITE setHover)
+    Q_PROPERTY(qreal press READ press WRITE setPress)
+
+public:
+    explicit AnimatedButton(QWidget *parent = nullptr)
+        : QPushButton(parent)
+    {
+        setMinimumHeight(36);
+        setCursor(Qt::PointingHandCursor);
+        hoverAnimation_ = new QPropertyAnimation(this, "hover", this);
+        hoverAnimation_->setDuration(170);
+        hoverAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+        pressAnimation_ = new QPropertyAnimation(this, "press", this);
+        pressAnimation_->setDuration(120);
+        pressAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    }
+
+    qreal hover() const { return hover_; }
+    qreal press() const { return press_; }
+
+    void setHover(qreal hover)
+    {
+        hover_ = hover;
+        update();
+    }
+
+    void setPress(qreal press)
+    {
+        press_ = press;
+        update();
+    }
+
+protected:
+    void enterEvent(QEvent *event) override
+    {
+        animate(hoverAnimation_, hover_, 1.0);
+        QPushButton::enterEvent(event);
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        animate(hoverAnimation_, hover_, 0.0);
+        animate(pressAnimation_, press_, 0.0);
+        QPushButton::leaveEvent(event);
+    }
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        animate(pressAnimation_, press_, 1.0);
+        QPushButton::mousePressEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        animate(pressAnimation_, press_, 0.0);
+        QPushButton::mouseReleaseEvent(event);
+    }
+
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        const bool primary = objectName() == QStringLiteral("PrimaryButton");
+        const bool chrome = objectName() == QStringLiteral("ChromeButton") || objectName() == QStringLiteral("CloseButton");
+        const bool close = objectName() == QStringLiteral("CloseButton");
+        QColor base = primary ? QColor(29, 29, 31) : QColor(255, 255, 255);
+        QColor hoverColor = primary ? QColor(55, 61, 70) : QColor(241, 245, 249);
+        QColor pressColor = primary ? QColor(18, 22, 30) : QColor(227, 234, 242);
+        QColor border = primary ? QColor(29, 29, 31) : QColor(203, 211, 221);
+        QColor textColor = primary ? QColor(255, 255, 255) : QColor(29, 29, 31);
+        if (chrome) {
+            base = QColor(255, 255, 255, 0);
+            hoverColor = close ? QColor(255, 69, 58, 34) : QColor(29, 31, 36, 18);
+            pressColor = close ? QColor(255, 69, 58, 58) : QColor(29, 31, 36, 30);
+            border = QColor(255, 255, 255, 0);
+            textColor = close ? mixedColor(QColor(67, 72, 81), QColor(190, 52, 48), hover_)
+                              : QColor(67, 72, 81);
+        }
+
+        if (!isEnabled()) {
+            base = QColor(238, 242, 246);
+            hoverColor = base;
+            pressColor = base;
+            border = QColor(217, 223, 231);
+            textColor = QColor(164, 169, 177);
+        }
+
+        QColor fill = mixedColor(mixedColor(base, hoverColor, hover_), pressColor, press_);
+        border = chrome ? border : mixedColor(border, QColor(111, 130, 150), hover_);
+
+        const QRectF rect = QRectF(0.5, 0.5 + press_ * 1.0, width() - 1, height() - 1 - press_ * 1.0);
+        if (!chrome) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(28, 31, 36, static_cast<int>(14 * hover_)));
+            painter.drawRoundedRect(rect.adjusted(0, 2, 0, 2), 7, 7);
+        }
+        painter.setPen(QPen(border, 1));
+        painter.setBrush(fill);
+        painter.drawRoundedRect(rect, 7, 7);
+
+        painter.setPen(textColor);
+        painter.setFont(font());
+        const qreal padding = chrome ? 0.0 : 14.0;
+        painter.drawText(rect.adjusted(padding, 0, -padding, 0), Qt::AlignCenter, text());
+    }
+
+private:
+    void animate(QPropertyAnimation *animation, qreal start, qreal target)
+    {
+        animation->stop();
+        animation->setStartValue(start);
+        animation->setEndValue(target);
+        animation->start();
+    }
+
+    qreal hover_ = 0.0;
+    qreal press_ = 0.0;
+    QPropertyAnimation *hoverAnimation_ = nullptr;
+    QPropertyAnimation *pressAnimation_ = nullptr;
+};
+
 class CleanerWindow : public QWidget {
     Q_OBJECT
 
 public:
     CleanerWindow()
     {
+        setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
         user_ = qEnvironmentVariable("USER");
         if (user_.isEmpty()) {
             user_ = QStringLiteral("zengjianqi");
@@ -232,6 +433,11 @@ private:
         QString autoRefresh;
         QString errorTitle;
         QString errorMessage;
+        QString metricsTitle;
+        QString actionsTitle;
+        QString resultTitle;
+        QString ok;
+        QString cancel;
     };
 
     static Text zh()
@@ -272,7 +478,12 @@ private:
             QStringLiteral("已更新"),
             QStringLiteral("启动时自动扫描一次；后续可手动重新扫描"),
             QStringLiteral("操作失败"),
-            QStringLiteral("操作未完成。错误详情已写入：")
+            QStringLiteral("操作未完成。错误详情已写入："),
+            QStringLiteral("空间占用"),
+            QStringLiteral("可执行操作"),
+            QStringLiteral("执行结果"),
+            QStringLiteral("确定"),
+            QStringLiteral("取消")
         };
     }
 
@@ -314,18 +525,89 @@ private:
             QStringLiteral("Updated"),
             QStringLiteral("Scans once at startup. Use Scan to refresh manually."),
             QStringLiteral("Operation Failed"),
-            QStringLiteral("The operation did not complete. Error details were written to:")
+            QStringLiteral("The operation did not complete. Error details were written to:"),
+            QStringLiteral("Space Usage"),
+            QStringLiteral("Actions"),
+            QStringLiteral("Results"),
+            QStringLiteral("OK"),
+            QStringLiteral("Cancel")
         };
     }
 
     Text t() const { return language_->currentData().toString() == QStringLiteral("en") ? en() : zh(); }
 
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched != chrome_) {
+            return QWidget::eventFilter(watched, event);
+        }
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->button() == Qt::LeftButton) {
+                draggingWindow_ = true;
+                dragOffset_ = mouse->globalPos() - frameGeometry().topLeft();
+                return true;
+            }
+        }
+        if (event->type() == QEvent::MouseMove && draggingWindow_) {
+            auto *mouse = static_cast<QMouseEvent *>(event);
+            if (mouse->buttons() & Qt::LeftButton) {
+                if (isMaximized()) {
+                    showNormal();
+                }
+                move(mouse->globalPos() - dragOffset_);
+                return true;
+            }
+        }
+        if (event->type() == QEvent::MouseButtonRelease) {
+            draggingWindow_ = false;
+            return true;
+        }
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            isMaximized() ? showNormal() : showMaximized();
+            return true;
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
     void buildUi()
     {
         setObjectName(QStringLiteral("AppRoot"));
         auto *root = new QVBoxLayout(this);
-        root->setContentsMargins(16, 16, 16, 16);
+        root->setContentsMargins(14, 10, 14, 14);
         root->setSpacing(12);
+
+        chrome_ = new QFrame;
+        chrome_->setObjectName(QStringLiteral("ChromeBar"));
+        chrome_->installEventFilter(this);
+        auto *chromeLayout = new QHBoxLayout(chrome_);
+        chromeLayout->setContentsMargins(8, 0, 8, 0);
+        chromeLayout->setSpacing(8);
+        chromeTitle_ = new QLabel;
+        chromeTitle_->setObjectName(QStringLiteral("ChromeTitle"));
+        chromeLayout->addWidget(chromeTitle_, 1);
+        minimizeButton_ = new AnimatedButton;
+        maximizeButton_ = new AnimatedButton;
+        closeButton_ = new AnimatedButton;
+        minimizeButton_->setObjectName(QStringLiteral("ChromeButton"));
+        maximizeButton_->setObjectName(QStringLiteral("ChromeButton"));
+        closeButton_->setObjectName(QStringLiteral("CloseButton"));
+        minimizeButton_->setText(QStringLiteral("−"));
+        maximizeButton_->setText(QStringLiteral("□"));
+        closeButton_->setText(QStringLiteral("×"));
+        const QSize chromeButtonSize(32, 28);
+        minimizeButton_->setFixedSize(chromeButtonSize);
+        maximizeButton_->setFixedSize(chromeButtonSize);
+        closeButton_->setFixedSize(chromeButtonSize);
+        connect(minimizeButton_, &QPushButton::clicked, this, &QWidget::showMinimized);
+        connect(maximizeButton_, &QPushButton::clicked, this, [this]() {
+            isMaximized() ? showNormal() : showMaximized();
+        });
+        connect(closeButton_, &QPushButton::clicked, this, &QWidget::close);
+        chromeLayout->addWidget(minimizeButton_);
+        chromeLayout->addWidget(maximizeButton_);
+        chromeLayout->addWidget(closeButton_);
+        root->addWidget(chrome_);
 
         auto *headerFrame = new QFrame;
         headerFrame->setObjectName(QStringLiteral("HeaderFrame"));
@@ -396,6 +678,14 @@ private:
         header->addLayout(body);
         root->addWidget(headerFrame);
 
+        auto *metricsCard = new CardFrame;
+        metricsCard->setObjectName(QStringLiteral("CardFrame"));
+        auto *metricsLayout = new QVBoxLayout(metricsCard);
+        metricsLayout->setContentsMargins(16, 14, 16, 16);
+        metricsLayout->setSpacing(10);
+        metricsTitle_ = new QLabel;
+        metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        metricsLayout->addWidget(metricsTitle_);
         metrics_ = new QTableWidget(4, 4);
         metrics_->setObjectName(QStringLiteral("MetricsTable"));
         metrics_->verticalHeader()->hide();
@@ -405,13 +695,23 @@ private:
         metrics_->setAlternatingRowColors(true);
         metrics_->setShowGrid(false);
         metrics_->verticalHeader()->setDefaultSectionSize(42);
-        root->addWidget(metrics_);
+        metricsLayout->addWidget(metrics_);
+        root->addWidget(metricsCard);
 
+        auto *actionsCard = new CardFrame;
+        actionsCard->setObjectName(QStringLiteral("CardFrame"));
+        auto *actionsCardLayout = new QVBoxLayout(actionsCard);
+        actionsCardLayout->setContentsMargins(16, 14, 16, 16);
+        actionsCardLayout->setSpacing(10);
+        actionsTitle_ = new QLabel;
+        actionsTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        actionsCardLayout->addWidget(actionsTitle_);
         auto *actions = new QHBoxLayout;
-        scanButton_ = new QPushButton;
-        cleanOldButton_ = new QPushButton;
-        autostartButton_ = new QPushButton;
-        monitorButton_ = new QPushButton;
+        actions->setSpacing(10);
+        scanButton_ = new AnimatedButton;
+        cleanOldButton_ = new AnimatedButton;
+        autostartButton_ = new AnimatedButton;
+        monitorButton_ = new AnimatedButton;
         scanButton_->setObjectName(QStringLiteral("PrimaryButton"));
         cleanOldButton_->setObjectName(QStringLiteral("ActionButton"));
         autostartButton_->setObjectName(QStringLiteral("ActionButton"));
@@ -421,11 +721,20 @@ private:
         actions->addWidget(autostartButton_);
         actions->addWidget(monitorButton_);
         actions->addStretch(1);
-        root->addLayout(actions);
+        actionsCardLayout->addLayout(actions);
+        root->addWidget(actionsCard);
         connect(scanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
         connect(autostartButton_, &QPushButton::clicked, this, &CleanerWindow::showAutostartDialog);
         connect(cleanOldButton_, &QPushButton::clicked, this, &CleanerWindow::showContainerDialog);
 
+        auto *planCard = new CardFrame;
+        planCard->setObjectName(QStringLiteral("CardFrame"));
+        auto *planLayout = new QVBoxLayout(planCard);
+        planLayout->setContentsMargins(16, 14, 16, 16);
+        planLayout->setSpacing(10);
+        resultTitle_ = new QLabel;
+        resultTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        planLayout->addWidget(resultTitle_);
         plan_ = new QTableWidget(0, 3);
         plan_->setObjectName(QStringLiteral("PlanTable"));
         plan_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -435,10 +744,13 @@ private:
         plan_->setAlternatingRowColors(true);
         plan_->setShowGrid(false);
         plan_->verticalHeader()->setDefaultSectionSize(38);
-        root->addWidget(plan_, 1);
+        planLayout->addWidget(plan_, 1);
+        root->addWidget(planCard, 1);
 
         setStyleSheet(QStringLiteral(R"(
             QWidget#AppRoot { background: #f5f7fa; color: #1d1d1f; }
+            QFrame#ChromeBar { background: transparent; }
+            QLabel#ChromeTitle { color: #555b64; font-weight: 600; }
             QFrame#HeaderFrame {
                 border-radius: 8px;
                 border: 1px solid #d9dfe7;
@@ -456,6 +768,11 @@ private:
             QLabel#StatusTitle { color: #1d1d1f; font-weight: 700; }
             QLabel#StatusSummary { color: #24262b; font-weight: 600; }
             QLabel#LastUpdate { color: #737780; }
+            QLabel#SectionTitle {
+                color: #1d1d1f;
+                font-size: 15px;
+                font-weight: 700;
+            }
             QProgressBar#Progress {
                 border: 1px solid #cbd3dd;
                 border-radius: 6px;
@@ -511,6 +828,7 @@ private:
     {
         const Text text = t();
         setWindowTitle(text.title);
+        chromeTitle_->setText(text.title);
         title_->setText(text.title);
         languageLabel_->setText(text.language);
         userLabel_->setText(text.user);
@@ -520,6 +838,9 @@ private:
         cleanOldButton_->setText(text.cleanOld);
         autostartButton_->setText(text.disableAutostart);
         monitorButton_->setText(text.installMonitor);
+        metricsTitle_->setText(text.metricsTitle);
+        actionsTitle_->setText(text.actionsTitle);
+        resultTitle_->setText(text.resultTitle);
         metrics_->setHorizontalHeaderLabels({text.metric, text.before, text.released, text.current});
         plan_->setHorizontalHeaderLabels({text.stage, text.status, text.detail});
         updateStatusSummary();
@@ -703,6 +1024,7 @@ private:
         const QJsonArray entries = state_.value(QStringLiteral("autostarts")).toArray();
         QVector<QPair<QString, QCheckBox *>> boxes;
         QDialog dialog(this);
+        dialog.setStyleSheet(styleSheet());
         dialog.setWindowTitle(t().selectAutostarts);
         auto *layout = new QVBoxLayout(&dialog);
         auto *scroll = new QScrollArea;
@@ -733,6 +1055,7 @@ private:
             layout->addWidget(new QLabel(t().noAutostarts));
         }
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        localizeDialogButtons(buttons);
         buttons->button(QDialogButtonBox::Ok)->setEnabled(!boxes.isEmpty());
         connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -757,6 +1080,7 @@ private:
         const QJsonArray entries = state_.value(QStringLiteral("oldContainers")).toArray();
         QVector<QPair<QString, QCheckBox *>> boxes;
         QDialog dialog(this);
+        dialog.setStyleSheet(styleSheet());
         dialog.setWindowTitle(t().selectContainers);
         auto *layout = new QVBoxLayout(&dialog);
         auto *scroll = new QScrollArea;
@@ -785,6 +1109,7 @@ private:
             layout->addWidget(new QLabel(t().noContainers));
         }
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        localizeDialogButtons(buttons);
         buttons->button(QDialogButtonBox::Ok)->setEnabled(!boxes.isEmpty());
         connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -909,7 +1234,24 @@ private:
 
     void showErrorDialog(const QString &path)
     {
-        QMessageBox::warning(this, t().errorTitle, t().errorMessage + QStringLiteral("\n") + path);
+        QMessageBox box(QMessageBox::Warning,
+                        t().errorTitle,
+                        t().errorMessage + QStringLiteral("\n") + path,
+                        QMessageBox::NoButton,
+                        this);
+        box.setStyleSheet(styleSheet());
+        box.addButton(t().ok, QMessageBox::AcceptRole);
+        box.exec();
+    }
+
+    void localizeDialogButtons(QDialogButtonBox *buttons)
+    {
+        if (auto *okButton = buttons->button(QDialogButtonBox::Ok)) {
+            okButton->setText(t().ok);
+        }
+        if (auto *cancelButton = buttons->button(QDialogButtonBox::Cancel)) {
+            cancelButton->setText(t().cancel);
+        }
     }
 
     using ProcessCallback = std::function<void(int, QByteArray)>;
@@ -935,6 +1277,10 @@ private:
     QString helper_;
     QJsonObject state_;
     bool busy_ = false;
+    bool draggingWindow_ = false;
+    QPoint dragOffset_;
+    QFrame *chrome_ = nullptr;
+    QLabel *chromeTitle_ = nullptr;
     QLabel *title_ = nullptr;
     QLabel *languageLabel_ = nullptr;
     QLabel *userLabel_ = nullptr;
@@ -946,12 +1292,18 @@ private:
     QComboBox *language_ = nullptr;
     QProgressBar *progress_ = nullptr;
     SpaceVisual *visual_ = nullptr;
+    QLabel *metricsTitle_ = nullptr;
+    QLabel *actionsTitle_ = nullptr;
+    QLabel *resultTitle_ = nullptr;
     QTableWidget *metrics_ = nullptr;
     QTableWidget *plan_ = nullptr;
     QPushButton *scanButton_ = nullptr;
     QPushButton *cleanOldButton_ = nullptr;
     QPushButton *autostartButton_ = nullptr;
     QPushButton *monitorButton_ = nullptr;
+    QPushButton *minimizeButton_ = nullptr;
+    QPushButton *maximizeButton_ = nullptr;
+    QPushButton *closeButton_ = nullptr;
 };
 
 int main(int argc, char **argv)
