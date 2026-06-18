@@ -10,8 +10,7 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
-#include <QHeaderView>
-#include <QItemSelectionModel>
+#include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -25,7 +24,10 @@
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollArea>
-#include <QTableWidget>
+#include <QStyle>
+#include <QStackedWidget>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
 
 #include <cmath>
@@ -328,7 +330,7 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
 
-        const bool primary = objectName() == QStringLiteral("PrimaryButton");
+        const bool primary = objectName() == QStringLiteral("PrimaryButton") || objectName() == QStringLiteral("NavSelected");
         const bool chrome = objectName() == QStringLiteral("ChromeButton") || objectName() == QStringLiteral("CloseButton");
         const bool close = objectName() == QStringLiteral("CloseButton");
         QColor base = primary ? QColor(29, 29, 31) : QColor(255, 255, 255);
@@ -366,10 +368,29 @@ protected:
         painter.setBrush(fill);
         painter.drawRoundedRect(rect, 7, 7);
 
+        const qreal padding = chrome ? 0.0 : 14.0;
+        QRectF textRect = rect.adjusted(padding, 0, -padding, 0);
         painter.setPen(textColor);
         painter.setFont(font());
-        const qreal padding = chrome ? 0.0 : 14.0;
-        painter.drawText(rect.adjusted(padding, 0, -padding, 0), Qt::AlignCenter, text());
+        if (!chrome && !icon().isNull()) {
+            const QSize iconExtent = iconSize().isValid() ? iconSize() : QSize(18, 18);
+            const int spacing = text().isEmpty() ? 0 : 8;
+            const int textWidth = fontMetrics().horizontalAdvance(text());
+            const int contentWidth = iconExtent.width() + spacing + textWidth;
+            const int startX = static_cast<int>(rect.center().x() - contentWidth / 2.0);
+            const QRect iconRect(startX,
+                                 static_cast<int>(rect.center().y() - iconExtent.height() / 2.0),
+                                 iconExtent.width(),
+                                 iconExtent.height());
+            icon().paint(&painter, iconRect, Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled);
+            textRect = QRectF(iconRect.right() + 1 + spacing,
+                              rect.top(),
+                              qMax(0.0, rect.right() - iconRect.right() - spacing - padding),
+                              rect.height());
+            painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, text());
+        } else {
+            painter.drawText(textRect, Qt::AlignCenter, text());
+        }
     }
 
 private:
@@ -387,91 +408,27 @@ private:
     QPropertyAnimation *pressAnimation_ = nullptr;
 };
 
-class RowHighlightTable : public QTableWidget {
+class ClickableCardFrame : public CardFrame {
     Q_OBJECT
-    Q_PROPERTY(qreal rowGlow READ rowGlow WRITE setRowGlow)
 
 public:
-    explicit RowHighlightTable(int rows, int columns, QWidget *parent = nullptr)
-        : QTableWidget(rows, columns, parent)
+    explicit ClickableCardFrame(QWidget *parent = nullptr)
+        : CardFrame(parent)
     {
-        setMouseTracking(true);
-        viewport()->setMouseTracking(true);
-        glowAnimation_ = new QPropertyAnimation(this, "rowGlow", this);
-        glowAnimation_->setDuration(150);
-        glowAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+        setCursor(Qt::PointingHandCursor);
     }
 
-    qreal rowGlow() const { return rowGlow_; }
-
-    void setRowGlow(qreal rowGlow)
-    {
-        rowGlow_ = rowGlow;
-        viewport()->update();
-    }
+signals:
+    void clicked();
 
 protected:
-    void mouseMoveEvent(QMouseEvent *event) override
+    void mouseReleaseEvent(QMouseEvent *event) override
     {
-        const int row = rowAt(event->pos().y());
-        if (row != hoverRow_) {
-            hoverRow_ = row;
-            animateGlow(row >= 0 ? 1.0 : 0.0);
+        if (event->button() == Qt::LeftButton && rect().contains(event->pos())) {
+            emit clicked();
         }
-        QTableWidget::mouseMoveEvent(event);
+        CardFrame::mouseReleaseEvent(event);
     }
-
-    void leaveEvent(QEvent *event) override
-    {
-        hoverRow_ = -1;
-        animateGlow(0.0);
-        QTableWidget::leaveEvent(event);
-    }
-
-    void paintEvent(QPaintEvent *event) override
-    {
-        QTableWidget::paintEvent(event);
-
-        QPainter painter(viewport());
-        painter.setRenderHint(QPainter::Antialiasing);
-
-        const auto drawRowBar = [this, &painter](int row, const QColor &color) {
-            if (row < 0 || row >= rowCount()) {
-                return;
-            }
-            const int y = rowViewportPosition(row);
-            const int h = rowHeight(row);
-            if (y + h < 0 || y > viewport()->height()) {
-                return;
-            }
-            const QRectF rect(8, y + 5, qMax(0, viewport()->width() - 16), qMax(0, h - 10));
-            painter.setPen(Qt::NoPen);
-            painter.setBrush(color);
-            painter.drawRoundedRect(rect, 7, 7);
-        };
-
-        if (selectionModel()) {
-            for (const QModelIndex &index : selectionModel()->selectedRows()) {
-                drawRowBar(index.row(), QColor(29, 31, 36, 18));
-            }
-        }
-        if (hoverRow_ >= 0) {
-            drawRowBar(hoverRow_, QColor(42, 54, 68, static_cast<int>(22 * rowGlow_)));
-        }
-    }
-
-private:
-    void animateGlow(qreal target)
-    {
-        glowAnimation_->stop();
-        glowAnimation_->setStartValue(rowGlow_);
-        glowAnimation_->setEndValue(target);
-        glowAnimation_->start();
-    }
-
-    int hoverRow_ = -1;
-    qreal rowGlow_ = 0.0;
-    QPropertyAnimation *glowAnimation_ = nullptr;
 };
 
 class CleanerWindow : public QWidget {
@@ -490,10 +447,15 @@ public:
             helper_ = QApplication::applicationDirPath() + QStringLiteral("/../libexec/kylin-space-cleaner-helper");
         }
 
-        setMinimumSize(1180, 780);
+        setMinimumSize(1180, 860);
         buildUi();
         applyLanguage();
-        QTimer::singleShot(100, this, &CleanerWindow::scanManual);
+        if (tabs_) {
+            tabs_->setCurrentIndex(0);
+        }
+        QTimer::singleShot(100, this, [this]() {
+            scanInternal(false);
+        });
     }
 
 private:
@@ -501,11 +463,12 @@ private:
         QString title;
         QString language;
         QString user;
+        QString statusTab;
+        QString scanTab;
         QString intro;
         QString scan;
         QString cleanOld;
         QString manageAutostart;
-        QString installMonitor;
         QString metric;
         QString before;
         QString released;
@@ -539,6 +502,7 @@ private:
         QString resultTitle;
         QString ok;
         QString cancel;
+        QString back;
         QString pendingScan;
         QString scanTime;
         QString cleanable;
@@ -566,11 +530,12 @@ private:
             QStringLiteral("麒麟V11空间清理"),
             QStringLiteral("语言："),
             QStringLiteral("用户："),
+            QStringLiteral("当前状态"),
+            QStringLiteral("扫描清理"),
             QStringLiteral("先扫描，再选择要执行的清理或抑制动作。执行前会展示计划，执行后会展示结果。"),
             QStringLiteral("扫描"),
             QStringLiteral("清理旧容器"),
             QStringLiteral("管理预热/自启动"),
-            QStringLiteral("安装监控"),
             QStringLiteral("项目"),
             QStringLiteral("当前占用"),
             QStringLiteral("可清理"),
@@ -604,6 +569,7 @@ private:
             QStringLiteral("执行结果"),
             QStringLiteral("确定"),
             QStringLiteral("取消"),
+            QStringLiteral("返回"),
             QStringLiteral("等待扫描"),
             QStringLiteral("扫描时间"),
             QStringLiteral("可清理"),
@@ -632,11 +598,12 @@ private:
             QStringLiteral("KylinOS V11 Desktop Space Cleaner"),
             QStringLiteral("Language:"),
             QStringLiteral("User:"),
+            QStringLiteral("Status"),
+            QStringLiteral("Scan & Clean"),
             QStringLiteral("Scan first, then choose cleanup or suppression actions. The app shows the plan before execution and the result afterwards."),
             QStringLiteral("Scan"),
             QStringLiteral("Clean Old Containers"),
             QStringLiteral("Manage Preheat/Autostart"),
-            QStringLiteral("Install Monitor"),
             QStringLiteral("Item"),
             QStringLiteral("Current Usage"),
             QStringLiteral("Cleanable"),
@@ -670,6 +637,7 @@ private:
             QStringLiteral("Results"),
             QStringLiteral("OK"),
             QStringLiteral("Cancel"),
+            QStringLiteral("Back"),
             QStringLiteral("Waiting for scan"),
             QStringLiteral("Scan Time"),
             QStringLiteral("Cleanable"),
@@ -767,18 +735,12 @@ private:
         chromeLayout->addWidget(closeButton_);
         windowRoot->addWidget(chrome_);
 
-        auto *contentScroll = new QScrollArea;
-        contentScroll->setObjectName(QStringLiteral("ContentScroll"));
-        contentScroll->setWidgetResizable(true);
-        contentScroll->setFrameShape(QFrame::NoFrame);
-        contentScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         auto *content = new QWidget;
         content->setObjectName(QStringLiteral("ContentPane"));
         auto *root = new QVBoxLayout(content);
         root->setContentsMargins(0, 0, 0, 0);
         root->setSpacing(12);
-        contentScroll->setWidget(content);
-        windowRoot->addWidget(contentScroll, 1);
+        windowRoot->addWidget(content, 1);
 
         auto *headerFrame = new QFrame;
         headerFrame->setObjectName(QStringLiteral("HeaderFrame"));
@@ -823,6 +785,19 @@ private:
         intro_->setWordWrap(true);
         copy->addWidget(intro_);
 
+        heroScanButton_ = new AnimatedButton;
+        heroScanButton_->setObjectName(QStringLiteral("PrimaryButton"));
+        heroScanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+        heroScanButton_->setIconSize(QSize(18, 18));
+        heroScanButton_->setMinimumWidth(142);
+        connect(heroScanButton_, &QPushButton::clicked, this, [this]() {
+            if (tabs_) {
+                tabs_->setCurrentIndex(1);
+            }
+            scanManual();
+        });
+        copy->addWidget(heroScanButton_, 0, Qt::AlignLeft);
+
         auto *statusFrame = new QFrame;
         statusFrame->setObjectName(QStringLiteral("StatusFrame"));
         auto *statusLayout = new QHBoxLayout(statusFrame);
@@ -846,6 +821,7 @@ private:
         statusLayout->addWidget(statusSummary_, 1);
         statusLayout->addWidget(lastUpdate_);
         statusLayout->addWidget(progress_);
+        statusFrame->setVisible(false);
         copy->addWidget(statusFrame);
         copy->addStretch(1);
         auto *visualCard = new CardFrame;
@@ -860,6 +836,98 @@ private:
         header->addLayout(body);
         root->addWidget(headerFrame);
 
+        auto *navFrame = new QFrame;
+        navFrame->setObjectName(QStringLiteral("NavFrame"));
+        auto *navLayout = new QHBoxLayout(navFrame);
+        navLayout->setContentsMargins(8, 8, 8, 8);
+        navLayout->setSpacing(10);
+        statusNavButton_ = new AnimatedButton;
+        scanNavButton_ = new AnimatedButton;
+        statusNavButton_->setObjectName(QStringLiteral("NavSelected"));
+        scanNavButton_->setObjectName(QStringLiteral("NavButton"));
+        statusNavButton_->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
+        scanNavButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+        statusNavButton_->setIconSize(QSize(18, 18));
+        scanNavButton_->setIconSize(QSize(18, 18));
+        statusNavButton_->setMinimumWidth(152);
+        scanNavButton_->setMinimumWidth(152);
+        navLayout->addWidget(statusNavButton_);
+        navLayout->addWidget(scanNavButton_);
+        navLayout->addStretch(1);
+        root->addWidget(navFrame);
+
+        tabs_ = new QTabWidget;
+        tabs_->setObjectName(QStringLiteral("MainTabs"));
+        tabs_->setDocumentMode(true);
+        tabs_->setIconSize(QSize(18, 18));
+        tabs_->tabBar()->hide();
+        connect(statusNavButton_, &QPushButton::clicked, this, [this]() {
+            if (tabs_) {
+                tabs_->setCurrentIndex(0);
+            }
+        });
+        connect(scanNavButton_, &QPushButton::clicked, this, [this]() {
+            if (tabs_) {
+                tabs_->setCurrentIndex(1);
+            }
+        });
+        connect(tabs_, &QTabWidget::currentChanged, this, &CleanerWindow::updateMainNav);
+
+        auto *statusPage = new QWidget;
+        statusPage->setObjectName(QStringLiteral("TabPage"));
+        auto *statusPageLayout = new QVBoxLayout(statusPage);
+        statusPageLayout->setContentsMargins(0, 12, 0, 0);
+        statusPageLayout->setSpacing(12);
+
+        auto *statusSwitcher = new QHBoxLayout;
+        statusSwitcher->setSpacing(10);
+        metricsPageButton_ = new AnimatedButton;
+        appsPageButton_ = new AnimatedButton;
+        metricsPageButton_->setObjectName(QStringLiteral("PrimaryButton"));
+        appsPageButton_->setObjectName(QStringLiteral("ActionButton"));
+        metricsPageButton_->setIcon(style()->standardIcon(QStyle::SP_DriveHDIcon));
+        appsPageButton_->setIcon(style()->standardIcon(QStyle::SP_FileDialogListView));
+        statusSwitcher->addWidget(metricsPageButton_);
+        statusSwitcher->addWidget(appsPageButton_);
+        statusSwitcher->addStretch(1);
+        statusPageLayout->addLayout(statusSwitcher);
+
+        statusStack_ = new QStackedWidget;
+        statusStack_->setObjectName(QStringLiteral("StatusStack"));
+        statusPageLayout->addWidget(statusStack_, 1);
+
+        auto *metricsPage = new QWidget;
+        metricsPage->setObjectName(QStringLiteral("TabPage"));
+        auto *metricsPageLayout = new QVBoxLayout(metricsPage);
+        metricsPageLayout->setContentsMargins(0, 0, 0, 0);
+        metricsPageLayout->setSpacing(12);
+
+        auto *appsPage = new QWidget;
+        appsPage->setObjectName(QStringLiteral("TabPage"));
+        auto *appsPageLayout = new QVBoxLayout(appsPage);
+        appsPageLayout->setContentsMargins(0, 0, 0, 0);
+        appsPageLayout->setSpacing(12);
+
+        statusStack_->addWidget(metricsPage);
+        statusStack_->addWidget(appsPage);
+        connect(metricsPageButton_, &QPushButton::clicked, this, [this]() {
+            showStatusSubPage(0);
+        });
+        connect(appsPageButton_, &QPushButton::clicked, this, [this]() {
+            showStatusSubPage(1);
+        });
+
+        auto *scanPage = new QWidget;
+        scanPage->setObjectName(QStringLiteral("TabPage"));
+        auto *scanPageLayout = new QVBoxLayout(scanPage);
+        scanPageLayout->setContentsMargins(0, 12, 0, 0);
+        scanPageLayout->setSpacing(12);
+
+        tabs_->addTab(statusPage, style()->standardIcon(QStyle::SP_ComputerIcon), QString());
+        tabs_->addTab(scanPage, style()->standardIcon(QStyle::SP_BrowserReload), QString());
+        tabs_->setCurrentIndex(0);
+        root->addWidget(tabs_);
+
         auto *metricsCard = new CardFrame;
         metricsCard->setObjectName(QStringLiteral("CardFrame"));
         metricsCard->setInteractive(false);
@@ -869,21 +937,21 @@ private:
         metricsTitle_ = new QLabel;
         metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
         metricsLayout->addWidget(metricsTitle_);
-        metrics_ = new RowHighlightTable(4, 4);
-        metrics_->setObjectName(QStringLiteral("MetricsTable"));
-        metrics_->verticalHeader()->hide();
-        metrics_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        metrics_->setSelectionMode(QAbstractItemView::NoSelection);
-        metrics_->setAlternatingRowColors(true);
-        metrics_->setShowGrid(false);
-        configureTable(metrics_);
-        metrics_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        metrics_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-        metrics_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        metrics_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-        metrics_->setMinimumHeight(270);
-        metricsLayout->addWidget(metrics_);
-        root->addWidget(metricsCard);
+        auto *metricsScroll = createCardList(&metricsRows_, 270);
+        metricsList_ = metricsScroll->widget();
+        metricsLayout->addWidget(metricsScroll);
+        metricsPageLayout->addWidget(metricsCard);
+        metricsPageLayout->addStretch(1);
+
+        appsStack_ = new QStackedWidget;
+        appsStack_->setObjectName(QStringLiteral("AppsStack"));
+        appsPageLayout->addWidget(appsStack_, 1);
+
+        auto *appsOverview = new QWidget;
+        appsOverview->setObjectName(QStringLiteral("TabPage"));
+        auto *appsOverviewLayout = new QVBoxLayout(appsOverview);
+        appsOverviewLayout->setContentsMargins(0, 0, 0, 0);
+        appsOverviewLayout->setSpacing(12);
 
         auto *appsCard = new CardFrame;
         appsCard->setObjectName(QStringLiteral("CardFrame"));
@@ -894,25 +962,46 @@ private:
         appsTitle_ = new QLabel;
         appsTitle_->setObjectName(QStringLiteral("SectionTitle"));
         appsLayout->addWidget(appsTitle_);
-        apps_ = new RowHighlightTable(0, 4);
-        apps_->setObjectName(QStringLiteral("AppsTable"));
-        apps_->verticalHeader()->hide();
-        apps_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        apps_->setSelectionBehavior(QAbstractItemView::SelectRows);
-        apps_->setSelectionMode(QAbstractItemView::SingleSelection);
-        apps_->setAlternatingRowColors(true);
-        apps_->setShowGrid(false);
-        configureTable(apps_);
-        apps_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        apps_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        apps_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        apps_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        apps_->setMinimumHeight(360);
-        appsLayout->addWidget(apps_);
-        root->addWidget(appsCard);
-        connect(apps_, &QTableWidget::cellClicked, this, [this](int row, int) {
-            showApplicationContainers(row);
+        auto *appsScroll = createCardList(&appsRows_, 380);
+        appsList_ = appsScroll->widget();
+        appsLayout->addWidget(appsScroll);
+        appsOverviewLayout->addWidget(appsCard);
+        appsOverviewLayout->addStretch(1);
+
+        auto *detailPage = new QWidget;
+        detailPage->setObjectName(QStringLiteral("TabPage"));
+        auto *detailLayout = new QVBoxLayout(detailPage);
+        detailLayout->setContentsMargins(0, 0, 0, 0);
+        detailLayout->setSpacing(12);
+        auto *detailHeader = new QHBoxLayout;
+        detailHeader->setSpacing(10);
+        backToAppsButton_ = new AnimatedButton;
+        backToAppsButton_->setObjectName(QStringLiteral("ActionButton"));
+        backToAppsButton_->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
+        detailTitle_ = new QLabel;
+        detailTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        detailHeader->addWidget(backToAppsButton_);
+        detailHeader->addWidget(detailTitle_, 1);
+        detailLayout->addLayout(detailHeader);
+        auto *detailCard = new CardFrame;
+        detailCard->setObjectName(QStringLiteral("CardFrame"));
+        detailCard->setInteractive(false);
+        auto *detailCardLayout = new QVBoxLayout(detailCard);
+        detailCardLayout->setContentsMargins(16, 14, 16, 16);
+        detailCardLayout->setSpacing(10);
+        auto *detailScroll = createCardList(&detailRows_, 420);
+        detailList_ = detailScroll->widget();
+        detailCardLayout->addWidget(detailScroll);
+        detailLayout->addWidget(detailCard, 1);
+        connect(backToAppsButton_, &QPushButton::clicked, this, [this]() {
+            if (appsStack_) {
+                appsStack_->setCurrentIndex(0);
+                fadeIn(appsStack_->currentWidget());
+            }
         });
+
+        appsStack_->addWidget(appsOverview);
+        appsStack_->addWidget(detailPage);
 
         auto *actionsCard = new CardFrame;
         actionsCard->setObjectName(QStringLiteral("CardFrame"));
@@ -928,18 +1017,15 @@ private:
         scanButton_ = new AnimatedButton;
         cleanOldButton_ = new AnimatedButton;
         autostartButton_ = new AnimatedButton;
-        monitorButton_ = new AnimatedButton;
         scanButton_->setObjectName(QStringLiteral("PrimaryButton"));
         cleanOldButton_->setObjectName(QStringLiteral("ActionButton"));
         autostartButton_->setObjectName(QStringLiteral("ActionButton"));
-        monitorButton_->setEnabled(false);
         actions->addWidget(scanButton_);
         actions->addWidget(cleanOldButton_);
         actions->addWidget(autostartButton_);
-        actions->addWidget(monitorButton_);
         actions->addStretch(1);
         actionsCardLayout->addLayout(actions);
-        root->addWidget(actionsCard);
+        scanPageLayout->addWidget(actionsCard);
         connect(scanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
         connect(autostartButton_, &QPushButton::clicked, this, &CleanerWindow::showAutostartDialog);
         connect(cleanOldButton_, &QPushButton::clicked, this, &CleanerWindow::showContainerDialog);
@@ -953,20 +1039,11 @@ private:
         resultTitle_ = new QLabel;
         resultTitle_->setObjectName(QStringLiteral("SectionTitle"));
         planLayout->addWidget(resultTitle_);
-        plan_ = new RowHighlightTable(0, 3);
-        plan_->setObjectName(QStringLiteral("PlanTable"));
-        plan_->verticalHeader()->hide();
-        plan_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        plan_->setSelectionMode(QAbstractItemView::NoSelection);
-        plan_->setAlternatingRowColors(true);
-        plan_->setShowGrid(false);
-        configureTable(plan_);
-        plan_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        plan_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        plan_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-        plan_->setMinimumHeight(180);
-        planLayout->addWidget(plan_, 1);
-        root->addWidget(planCard);
+        auto *planScroll = createCardList(&planRows_, 260);
+        planList_ = planScroll->widget();
+        planLayout->addWidget(planScroll, 1);
+        scanPageLayout->addWidget(planCard);
+        scanPageLayout->addStretch(1);
 
         setStyleSheet(QStringLiteral(R"(
             QWidget#AppRoot { background: #f5f7fa; color: #1d1d1f; }
@@ -975,8 +1052,40 @@ private:
                 border: 0;
                 background: transparent;
             }
+            QScrollArea#CardListScroll {
+                border: 0;
+                background: transparent;
+            }
             QScrollArea#ContentScroll > QWidget > QWidget {
                 background: transparent;
+            }
+            QWidget#CardList, QWidget#TabPage {
+                background: transparent;
+            }
+            QTabWidget#MainTabs::pane {
+                border: 0;
+                background: transparent;
+                margin-top: 8px;
+            }
+            QTabBar::tab {
+                min-width: 132px;
+                min-height: 38px;
+                padding: 0 18px;
+                margin-right: 8px;
+                border: 1px solid #d9dfe7;
+                border-radius: 8px;
+                background: #ffffff;
+                color: #4a4f58;
+                font-weight: 700;
+            }
+            QTabBar::tab:selected {
+                background: #1d1d1f;
+                color: #ffffff;
+                border-color: #1d1d1f;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #f2f5f8;
+                border-color: #aebaca;
             }
             QFrame#ChromeBar { background: transparent; }
             QLabel#ChromeTitle { color: #555b64; font-weight: 600; }
@@ -998,10 +1107,47 @@ private:
             QLabel#StatusTitle { color: #1d1d1f; font-weight: 700; }
             QLabel#StatusSummary { color: #24262b; font-weight: 600; }
             QLabel#LastUpdate { color: #737780; }
+            QFrame#NavFrame {
+                border: 1px solid #d9dfe7;
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 214);
+            }
             QLabel#SectionTitle {
                 color: #1d1d1f;
                 font-size: 15px;
                 font-weight: 700;
+            }
+            QLabel#RowTitle {
+                color: #1d1d1f;
+                font-size: 15px;
+                font-weight: 800;
+            }
+            QFrame#ValuePill {
+                border: 1px solid #e1e6ed;
+                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #ffffff, stop:1 #f4f7fa);
+            }
+            QLabel#PillLabel {
+                color: #727782;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QLabel#PillValue {
+                color: #20242a;
+                font-size: 14px;
+                font-weight: 800;
+            }
+            QFrame#PathPill {
+                border: 1px solid #e1e6ed;
+                border-radius: 8px;
+                background: #fbfcfd;
+            }
+            QLabel#PathValue {
+                color: #2b3037;
+                font-size: 12px;
+                font-weight: 650;
+                line-height: 140%;
             }
             QProgressBar#Progress {
                 border: 1px solid #cbd3dd;
@@ -1014,28 +1160,6 @@ private:
                 border-radius: 6px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #1d1d1f, stop:1 #66798b);
-            }
-            QTableWidget#MetricsTable, QTableWidget#AppsTable, QTableWidget#PlanTable, QTableWidget#DetailTable {
-                border: 1px solid #d9dfe7;
-                border-radius: 8px;
-                background: #ffffff;
-                alternate-background-color: #f7f9fb;
-                selection-background-color: transparent;
-            }
-            QHeaderView::section {
-                background: #edf1f5;
-                color: #343941;
-                border: 0;
-                padding: 8px;
-                font-weight: 700;
-            }
-            QTableWidget::item {
-                padding: 7px 8px;
-                color: #1d1d1f;
-            }
-            QTableWidget::item:selected {
-                background: transparent;
-                color: #1d1d1f;
             }
             QComboBox {
                 min-height: 34px;
@@ -1088,7 +1212,22 @@ private:
                 border: 1px solid #1d1d1f;
                 background: #1d1d1f;
             }
-            QPushButton#PrimaryButton:hover { background: #343941; }
+            QPushButton#PrimaryButton:hover,
+            QPushButton#NavSelected:hover { background: #343941; }
+            QPushButton#NavButton {
+                min-height: 40px;
+                border-radius: 8px;
+                background: transparent;
+                border-color: transparent;
+                color: #3f454e;
+            }
+            QPushButton#NavSelected {
+                min-height: 40px;
+                border-radius: 8px;
+                color: #ffffff;
+                border: 1px solid #1d1d1f;
+                background: #1d1d1f;
+            }
             QPushButton:disabled {
                 color: #a4a9b1;
                 background: #eef2f6;
@@ -1107,63 +1246,201 @@ private:
         userLabel_->setText(text.user);
         intro_->setText(text.intro);
         statusTitle_->setText(text.live);
+        if (heroScanButton_) {
+            heroScanButton_->setText(text.scan);
+        }
+        if (statusNavButton_) {
+            statusNavButton_->setText(text.statusTab);
+        }
+        if (scanNavButton_) {
+            scanNavButton_->setText(text.scanTab);
+        }
         scanButton_->setText(text.scan);
         cleanOldButton_->setText(text.cleanOld);
         autostartButton_->setText(text.manageAutostart);
-        monitorButton_->setText(text.installMonitor);
         metricsTitle_->setText(text.metricsTitle);
         appsTitle_->setText(text.applicationsTitle);
+        if (metricsPageButton_) {
+            metricsPageButton_->setText(text.metricsTitle);
+        }
+        if (appsPageButton_) {
+            appsPageButton_->setText(text.applicationsTitle);
+        }
+        if (backToAppsButton_) {
+            backToAppsButton_->setText(text.back);
+        }
         actionsTitle_->setText(text.actionsTitle);
         resultTitle_->setText(text.resultTitle);
-        metrics_->setHorizontalHeaderLabels({text.metric, text.before, text.released, text.metricStatus});
-        apps_->setHorizontalHeaderLabels({text.appName, text.appKind, text.appContainers, text.appSize});
-        plan_->setHorizontalHeaderLabels({text.stage, text.status, text.detail});
+        if (tabs_) {
+            tabs_->setTabText(0, text.statusTab);
+            tabs_->setTabText(1, text.scanTab);
+        }
         updateStatusSummary();
 
-        const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
-        for (int row = 0; row < names.size(); ++row) {
-            setCell(metrics_, row, 0, names.at(row));
-            for (int col = 1; col < 4; ++col) {
-                setCell(metrics_, row, col, state_.isEmpty() ? text.pendingScan : QStringLiteral("-"));
-            }
-        }
         if (!state_.isEmpty()) {
             updateMetrics();
             updateApplications();
         } else {
-            apps_->setRowCount(0);
+            resetMetricCards();
+            clearRows(appsRows_);
         }
     }
 
-    static QTableWidgetItem *ensureItem(QTableWidget *table, int row, int col)
+    QScrollArea *createCardList(QVBoxLayout **rows, int minimumHeight)
     {
-        if (!table->item(row, col)) {
-            table->setItem(row, col, new QTableWidgetItem);
+        auto *scroll = new QScrollArea;
+        scroll->setObjectName(QStringLiteral("CardListScroll"));
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setMinimumHeight(minimumHeight);
+        auto *content = new QWidget;
+        content->setObjectName(QStringLiteral("CardList"));
+        auto *layout = new QVBoxLayout(content);
+        layout->setContentsMargins(2, 2, 2, 2);
+        layout->setSpacing(10);
+        scroll->setWidget(content);
+        *rows = layout;
+        return scroll;
+    }
+
+    static QLabel *makeLabel(const QString &text, const QString &objectName)
+    {
+        auto *label = new QLabel(text);
+        label->setObjectName(objectName);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        label->setWordWrap(objectName == QStringLiteral("PillValue") || objectName == QStringLiteral("PathValue"));
+        label->setToolTip(text);
+        return label;
+    }
+
+    static void clearRows(QVBoxLayout *layout)
+    {
+        if (!layout) {
+            return;
         }
-        return table->item(row, col);
+        while (QLayoutItem *item = layout->takeAt(0)) {
+            if (QWidget *widget = item->widget()) {
+                widget->deleteLater();
+            }
+            delete item;
+        }
+        layout->addStretch(1);
     }
 
-    static void configureTable(QTableWidget *table)
+    QFrame *createValuePill(const QString &label, const QString &value)
     {
-        table->setWordWrap(false);
-        table->setTextElideMode(Qt::ElideNone);
-        table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        table->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-        table->horizontalHeader()->setMinimumSectionSize(92);
-        table->horizontalHeader()->setMinimumHeight(48);
-        table->horizontalHeader()->setStretchLastSection(false);
-        table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-        table->verticalHeader()->setMinimumSectionSize(48);
-        table->verticalHeader()->setDefaultSectionSize(50);
+        auto *group = new QFrame;
+        group->setObjectName(QStringLiteral("ValuePill"));
+        auto *groupLayout = new QVBoxLayout(group);
+        groupLayout->setContentsMargins(10, 4, 10, 4);
+        groupLayout->setSpacing(2);
+        groupLayout->addWidget(makeLabel(label, QStringLiteral("PillLabel")));
+        groupLayout->addWidget(makeLabel(value, QStringLiteral("PillValue")));
+        return group;
     }
 
-    static QTableWidgetItem *setCell(QTableWidget *table, int row, int col, const QString &text)
+    ClickableCardFrame *createInfoRow(const QString &title,
+                                      const QStringList &labels,
+                                      const QStringList &values,
+                                      bool clickable = false)
     {
-        QTableWidgetItem *item = ensureItem(table, row, col);
-        item->setText(text);
-        item->setToolTip(text);
-        item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        return item;
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setInteractive(true);
+        if (!clickable) {
+            row->setCursor(Qt::ArrowCursor);
+        }
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(14, 8, 14, 8);
+        layout->setSpacing(12);
+
+        auto *titleLabel = makeLabel(title, QStringLiteral("RowTitle"));
+        titleLabel->setMinimumWidth(180);
+        layout->addWidget(titleLabel, 2);
+
+        for (int i = 0; i < values.size(); ++i) {
+            layout->addWidget(createValuePill(labels.value(i), values.at(i)), 1);
+        }
+        return row;
+    }
+
+    CardFrame *createContainerCard(const QJsonObject &item)
+    {
+        const Text text = t();
+        auto *row = new CardFrame;
+        row->setObjectName(QStringLiteral("ContainerRow"));
+        row->setInteractive(false);
+        auto *layout = new QVBoxLayout(row);
+        layout->setContentsMargins(14, 10, 14, 10);
+        layout->setSpacing(10);
+
+        auto *title = makeLabel(item.value(QStringLiteral("module")).toString(), QStringLiteral("RowTitle"));
+        layout->addWidget(title);
+
+        auto *meta = new QHBoxLayout;
+        meta->setSpacing(10);
+        meta->addWidget(createValuePill(text.version, item.value(QStringLiteral("version")).toString()), 1);
+        meta->addWidget(createValuePill(text.appSize, fmtBytes(jsonInt64(item, QStringLiteral("bytes")))), 1);
+        meta->addWidget(createValuePill(text.currentLayer, item.value(QStringLiteral("current")).toBool() ? text.active : text.disabled), 1);
+        meta->addWidget(createValuePill(text.inUse, item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled), 1);
+        layout->addLayout(meta);
+
+        auto *pathFrame = new QFrame;
+        pathFrame->setObjectName(QStringLiteral("PathPill"));
+        auto *pathLayout = new QVBoxLayout(pathFrame);
+        pathLayout->setContentsMargins(10, 6, 10, 6);
+        pathLayout->setSpacing(3);
+        pathLayout->addWidget(makeLabel(text.path, QStringLiteral("PillLabel")));
+        pathLayout->addWidget(makeLabel(item.value(QStringLiteral("path")).toString(), QStringLiteral("PathValue")));
+        layout->addWidget(pathFrame);
+        return row;
+    }
+
+    void resetMetricCards()
+    {
+        const Text text = t();
+        clearRows(metricsRows_);
+        const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
+        for (const QString &name : names) {
+            addMetricCard(name, text.pendingScan, QStringLiteral("-"), text.pendingScan);
+        }
+    }
+
+    void addMetricCard(const QString &name, const QString &usage, const QString &cleanable, const QString &status)
+    {
+        if (!metricsRows_) {
+            return;
+        }
+        if (metricsRows_->count() > 0 && metricsRows_->itemAt(metricsRows_->count() - 1)->spacerItem()) {
+            delete metricsRows_->takeAt(metricsRows_->count() - 1);
+        }
+        const Text text = t();
+        metricsRows_->addWidget(createInfoRow(name,
+                                             {text.before, text.released, text.metricStatus},
+                                             {usage, cleanable, status}));
+        metricsRows_->addStretch(1);
+    }
+
+    void addApplicationCard(int row, const QJsonObject &app)
+    {
+        if (!appsRows_) {
+            return;
+        }
+        if (appsRows_->count() > 0 && appsRows_->itemAt(appsRows_->count() - 1)->spacerItem()) {
+            delete appsRows_->takeAt(appsRows_->count() - 1);
+        }
+        const Text text = t();
+        auto *card = createInfoRow(app.value(QStringLiteral("ref")).toString(),
+                                   {text.appKind, text.appContainers, text.appSize},
+                                   {app.value(QStringLiteral("kind")).toString(),
+                                    QString::number(app.value(QStringLiteral("containerCount")).toInt()),
+                                    fmtBytes(jsonInt64(app, QStringLiteral("bytes")))},
+                                   true);
+        connect(card, &ClickableCardFrame::clicked, this, [this, row]() {
+            showApplicationContainers(row);
+        });
+        appsRows_->addWidget(card);
+        appsRows_->addStretch(1);
     }
 
     static qint64 jsonInt64(const QJsonObject &object, const QString &key)
@@ -1189,12 +1466,15 @@ private:
 
     void addPlanRow(const QString &stage, const QString &status, const QString &detail)
     {
-        const int row = plan_->rowCount();
-        plan_->insertRow(row);
-        setCell(plan_, row, 0, stage);
-        setCell(plan_, row, 1, status);
-        setCell(plan_, row, 2, detail);
-        plan_->scrollToBottom();
+        if (!planRows_) {
+            return;
+        }
+        if (planRows_->count() > 0 && planRows_->itemAt(planRows_->count() - 1)->spacerItem()) {
+            delete planRows_->takeAt(planRows_->count() - 1);
+        }
+        auto *row = createInfoRow(stage, {t().status, t().detail}, {status, detail});
+        planRows_->addWidget(row);
+        planRows_->addStretch(1);
     }
 
     void setBusy(bool busy)
@@ -1225,7 +1505,7 @@ private:
         const Text text = t();
         setBusy(true);
         if (manual) {
-            plan_->setRowCount(0);
+            clearRows(planRows_);
             addPlanRow(text.planned, text.running, language_->currentData().toString() == QStringLiteral("en")
                 ? QStringLiteral("Read space usage, old Kaiming containers, and autostart entries.")
                 : QStringLiteral("读取空间占用、旧 Kaiming 容器和自启动项。"));
@@ -1283,32 +1563,29 @@ private:
         const Text text = t();
         const QJsonObject metrics = state_.value(QStringLiteral("metrics")).toObject();
         const QStringList keys{QStringLiteral("root_used"), QStringLiteral("kaiming"), QStringLiteral("ostree_upper"), QStringLiteral("kare_upper")};
+        const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
         const qint64 oldContainerBytes = oldContainersBytes();
+        clearRows(metricsRows_);
         for (int row = 0; row < keys.size(); ++row) {
             const qint64 value = jsonInt64(metrics, keys.at(row));
-            setCell(metrics_, row, 1, fmtBytes(value));
-            setCell(metrics_, row, 2, row == 1 ? fmtBytes(oldContainerBytes) : QStringLiteral("-"));
+            const QString cleanable = row == 1 ? fmtBytes(oldContainerBytes) : QStringLiteral("-");
+            QString status;
             if (row == 1) {
-                setCell(metrics_, row, 3, oldContainerBytes > 0 ? text.cleanable : text.noCleanable);
+                status = oldContainerBytes > 0 ? text.cleanable : text.noCleanable;
             } else {
-                setCell(metrics_, row, 3, text.normal);
+                status = text.normal;
             }
+            addMetricCard(names.at(row), fmtBytes(value), cleanable, status);
         }
-        metrics_->resizeColumnsToContents();
-        metrics_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-        metrics_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
     }
 
     void updateApplications()
     {
         const QJsonArray applications = state_.value(QStringLiteral("applications")).toArray();
-        apps_->setRowCount(applications.size());
+        clearRows(appsRows_);
         for (int row = 0; row < applications.size(); ++row) {
             const QJsonObject app = applications.at(row).toObject();
-            setCell(apps_, row, 0, app.value(QStringLiteral("ref")).toString());
-            setCell(apps_, row, 1, app.value(QStringLiteral("kind")).toString());
-            setCell(apps_, row, 2, QString::number(app.value(QStringLiteral("containerCount")).toInt()));
-            setCell(apps_, row, 3, fmtBytes(jsonInt64(app, QStringLiteral("bytes"))));
+            addApplicationCard(row, app);
         }
     }
 
@@ -1322,42 +1599,68 @@ private:
         const QJsonObject app = applications.at(row).toObject();
         const QJsonArray containers = app.value(QStringLiteral("containers")).toArray();
 
-        QDialog dialog(this);
-        dialog.setStyleSheet(styleSheet());
-        dialog.setWindowTitle(text.containerDetails + QStringLiteral(" - ") + app.value(QStringLiteral("ref")).toString());
-        auto *layout = new QVBoxLayout(&dialog);
-        auto *table = new RowHighlightTable(containers.size(), 6);
-        table->setObjectName(QStringLiteral("DetailTable"));
-        table->setHorizontalHeaderLabels({text.module, text.version, text.appSize, text.currentLayer, text.inUse, text.path});
-        table->verticalHeader()->hide();
-        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        table->setSelectionBehavior(QAbstractItemView::SelectRows);
-        table->setAlternatingRowColors(true);
-        table->setShowGrid(false);
-        configureTable(table);
-        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
+        if (!detailRows_ || !appsStack_) {
+            return;
+        }
+        detailTitle_->setText(text.containerDetails + QStringLiteral(" - ") + app.value(QStringLiteral("ref")).toString());
+        clearRows(detailRows_);
         for (int i = 0; i < containers.size(); ++i) {
             const QJsonObject item = containers.at(i).toObject();
-            setCell(table, i, 0, item.value(QStringLiteral("module")).toString());
-            setCell(table, i, 1, item.value(QStringLiteral("version")).toString());
-            setCell(table, i, 2, fmtBytes(jsonInt64(item, QStringLiteral("bytes"))));
-            setCell(table, i, 3, item.value(QStringLiteral("current")).toBool() ? text.active : text.disabled);
-            setCell(table, i, 4, item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled);
-            setCell(table, i, 5, item.value(QStringLiteral("path")).toString());
+            if (detailRows_->count() > 0 && detailRows_->itemAt(detailRows_->count() - 1)->spacerItem()) {
+                delete detailRows_->takeAt(detailRows_->count() - 1);
+            }
+            detailRows_->addWidget(createContainerCard(item));
+            detailRows_->addStretch(1);
         }
-        table->setMinimumSize(1060, 460);
-        layout->addWidget(table);
-        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok);
-        localizeDialogButtons(buttons);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        layout->addWidget(buttons);
-        dialog.resize(1120, 560);
-        dialog.exec();
+        appsStack_->setCurrentIndex(1);
+        fadeIn(appsStack_->currentWidget());
+    }
+
+    void updateMainNav(int index)
+    {
+        if (!statusNavButton_ || !scanNavButton_) {
+            return;
+        }
+        statusNavButton_->setObjectName(index == 0 ? QStringLiteral("NavSelected") : QStringLiteral("NavButton"));
+        scanNavButton_->setObjectName(index == 1 ? QStringLiteral("NavSelected") : QStringLiteral("NavButton"));
+        statusNavButton_->style()->unpolish(statusNavButton_);
+        statusNavButton_->style()->polish(statusNavButton_);
+        scanNavButton_->style()->unpolish(scanNavButton_);
+        scanNavButton_->style()->polish(scanNavButton_);
+        fadeIn(tabs_ ? tabs_->currentWidget() : nullptr);
+    }
+
+    void showStatusSubPage(int index)
+    {
+        if (!statusStack_) {
+            return;
+        }
+        statusStack_->setCurrentIndex(index);
+        metricsPageButton_->setObjectName(index == 0 ? QStringLiteral("PrimaryButton") : QStringLiteral("ActionButton"));
+        appsPageButton_->setObjectName(index == 1 ? QStringLiteral("PrimaryButton") : QStringLiteral("ActionButton"));
+        metricsPageButton_->style()->unpolish(metricsPageButton_);
+        metricsPageButton_->style()->polish(metricsPageButton_);
+        appsPageButton_->style()->unpolish(appsPageButton_);
+        appsPageButton_->style()->polish(appsPageButton_);
+        fadeIn(statusStack_->currentWidget());
+    }
+
+    void fadeIn(QWidget *widget)
+    {
+        if (!widget) {
+            return;
+        }
+        auto *effect = new QGraphicsOpacityEffect(widget);
+        widget->setGraphicsEffect(effect);
+        auto *animation = new QPropertyAnimation(effect, "opacity", widget);
+        animation->setDuration(180);
+        animation->setStartValue(0.72);
+        animation->setEndValue(1.0);
+        animation->setEasingCurve(QEasingCurve::OutCubic);
+        connect(animation, &QPropertyAnimation::finished, widget, [widget]() {
+            widget->setGraphicsEffect(nullptr);
+        });
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
 
     qint64 oldContainersBytes() const
@@ -1388,15 +1691,20 @@ private:
 
     void animateRefresh()
     {
-        auto *effect = new QGraphicsOpacityEffect(metrics_);
-        metrics_->setGraphicsEffect(effect);
-        auto *animation = new QPropertyAnimation(effect, "opacity", metrics_);
+        if (!metricsList_) {
+            return;
+        }
+        auto *effect = new QGraphicsOpacityEffect(metricsList_);
+        metricsList_->setGraphicsEffect(effect);
+        auto *animation = new QPropertyAnimation(effect, "opacity", metricsList_);
         animation->setDuration(260);
         animation->setStartValue(0.55);
         animation->setEndValue(1.0);
         animation->setEasingCurve(QEasingCurve::OutCubic);
         connect(animation, &QPropertyAnimation::finished, this, [this]() {
-            metrics_->setGraphicsEffect(nullptr);
+            if (metricsList_) {
+                metricsList_->setGraphicsEffect(nullptr);
+            }
         });
         animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
@@ -1685,17 +1993,31 @@ private:
     QComboBox *language_ = nullptr;
     QProgressBar *progress_ = nullptr;
     SpaceVisual *visual_ = nullptr;
+    QTabWidget *tabs_ = nullptr;
+    QStackedWidget *statusStack_ = nullptr;
+    QStackedWidget *appsStack_ = nullptr;
     QLabel *metricsTitle_ = nullptr;
     QLabel *appsTitle_ = nullptr;
+    QLabel *detailTitle_ = nullptr;
     QLabel *actionsTitle_ = nullptr;
     QLabel *resultTitle_ = nullptr;
-    QTableWidget *metrics_ = nullptr;
-    QTableWidget *apps_ = nullptr;
-    QTableWidget *plan_ = nullptr;
+    QWidget *metricsList_ = nullptr;
+    QWidget *appsList_ = nullptr;
+    QWidget *detailList_ = nullptr;
+    QWidget *planList_ = nullptr;
+    QVBoxLayout *metricsRows_ = nullptr;
+    QVBoxLayout *appsRows_ = nullptr;
+    QVBoxLayout *detailRows_ = nullptr;
+    QVBoxLayout *planRows_ = nullptr;
+    QPushButton *heroScanButton_ = nullptr;
+    QPushButton *statusNavButton_ = nullptr;
+    QPushButton *scanNavButton_ = nullptr;
+    QPushButton *metricsPageButton_ = nullptr;
+    QPushButton *appsPageButton_ = nullptr;
+    QPushButton *backToAppsButton_ = nullptr;
     QPushButton *scanButton_ = nullptr;
     QPushButton *cleanOldButton_ = nullptr;
     QPushButton *autostartButton_ = nullptr;
-    QPushButton *monitorButton_ = nullptr;
     QPushButton *minimizeButton_ = nullptr;
     QPushButton *maximizeButton_ = nullptr;
     QPushButton *closeButton_ = nullptr;
