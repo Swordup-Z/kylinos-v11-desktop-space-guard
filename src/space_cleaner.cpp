@@ -2,9 +2,14 @@
 #include <QBoxLayout>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QFrame>
+#include <QGraphicsOpacityEffect>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -12,12 +17,122 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QProcess>
+#include <QProgressBar>
+#include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QTableWidget>
 #include <QTimer>
+
+#include <cmath>
+
+class SpaceVisual : public QWidget {
+    Q_OBJECT
+    Q_PROPERTY(qreal phase READ phase WRITE setPhase)
+
+public:
+    explicit SpaceVisual(QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        setFixedSize(184, 118);
+        auto *animation = new QPropertyAnimation(this, "phase", this);
+        animation->setDuration(3600);
+        animation->setStartValue(0.0);
+        animation->setEndValue(1.0);
+        animation->setLoopCount(-1);
+        animation->setEasingCurve(QEasingCurve::InOutSine);
+        animation->start();
+    }
+
+    qreal phase() const { return phase_; }
+
+    void setPhase(qreal phase)
+    {
+        phase_ = phase;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        const QRectF card(1, 1, width() - 2, height() - 2);
+        QLinearGradient bg(card.topLeft(), card.bottomRight());
+        bg.setColorAt(0.00, QColor(255, 255, 255, 72));
+        bg.setColorAt(0.48, QColor(255, 255, 255, 30));
+        bg.setColorAt(1.00, QColor(255, 255, 255, 18));
+        painter.setPen(QPen(QColor(255, 255, 255, 110), 1));
+        painter.setBrush(bg);
+        painter.drawRoundedRect(card, 8, 8);
+
+        QLinearGradient sheen(card.topLeft(), QPointF(card.right(), card.top()));
+        sheen.setColorAt(0.00, QColor(255, 255, 255, 0));
+        sheen.setColorAt(0.46 + 0.14 * std::sin(phase_ * 6.28318530718), QColor(255, 255, 255, 54));
+        sheen.setColorAt(1.00, QColor(255, 255, 255, 0));
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(sheen);
+        painter.drawRoundedRect(card.adjusted(1, 1, -1, -1), 8, 8);
+
+        const QPointF center(62, 59);
+        const QRectF outer(center.x() - 36, center.y() - 36, 72, 72);
+        const QRectF inner(center.x() - 25, center.y() - 25, 50, 50);
+        const qreal wave = std::sin(phase_ * 6.28318530718);
+        const qreal sweep = 118 + 28 * wave;
+
+        painter.setPen(QPen(QColor(255, 255, 255, 58), 8, Qt::SolidLine, Qt::RoundCap));
+        painter.drawArc(outer, 35 * 16, 285 * 16);
+        painter.setPen(QPen(QColor(103, 232, 208), 8, Qt::SolidLine, Qt::RoundCap));
+        painter.drawArc(outer,
+                        static_cast<int>((64 + phase_ * 360) * 16),
+                        static_cast<int>(sweep * 16));
+        painter.setPen(QPen(QColor(255, 206, 112, 190), 3, Qt::SolidLine, Qt::RoundCap));
+        painter.drawArc(inner,
+                        static_cast<int>((250 - phase_ * 270) * 16),
+                        static_cast<int>(92 * 16));
+
+        painter.setPen(QPen(QColor(255, 255, 255, 150), 1));
+        painter.drawEllipse(center, 18, 18);
+        painter.setBrush(QColor(255, 255, 255, 235));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(center, 5, 5);
+
+        painter.setBrush(QColor(255, 255, 255, 190));
+        for (int i = 0; i < 4; ++i) {
+            const qreal angle = phase_ * 6.28318530718 + i * 1.57079632679;
+            const qreal radius = 42 + 3 * std::sin(phase_ * 6.28318530718 + i);
+            painter.drawEllipse(QPointF(center.x() + std::cos(angle) * radius,
+                                        center.y() + std::sin(angle) * radius),
+                                i == 0 ? 2.6 : 1.8,
+                                i == 0 ? 2.6 : 1.8);
+        }
+
+        const int bars[5] = {32, 56, 42, 70, 48};
+        for (int i = 0; i < 5; ++i) {
+            const QRectF slot(118 + i * 10, 27, 6, 64);
+            painter.setBrush(QColor(255, 255, 255, 42));
+            painter.drawRoundedRect(slot, 3, 3);
+            const qreal pulse = 0.76 + 0.24 * std::sin(phase_ * 6.28318530718 + i * 0.62);
+            const QRectF fill(slot.left(), slot.bottom() - bars[i] * pulse, slot.width(), bars[i] * pulse);
+            painter.setBrush(i % 2 ? QColor(255, 205, 112, 222) : QColor(103, 232, 208, 222));
+            painter.drawRoundedRect(fill, 3, 3);
+        }
+
+        painter.setPen(QPen(QColor(255, 255, 255, 115), 1));
+        const qreal x = 12 + std::fmod(phase_ * 200, 160.0);
+        painter.drawLine(QPointF(x, 13), QPointF(x + 28, 13));
+        painter.setPen(QPen(QColor(255, 255, 255, 56), 1));
+        painter.drawLine(QPointF(112, 96), QPointF(166, 96));
+    }
+
+private:
+    qreal phase_ = 0.0;
+};
 
 class CleanerWindow : public QWidget {
     Q_OBJECT
@@ -34,10 +149,19 @@ public:
             helper_ = QApplication::applicationDirPath() + QStringLiteral("/../libexec/kylin-space-cleaner-helper");
         }
 
-        setMinimumSize(980, 680);
+        setMinimumSize(1040, 720);
         buildUi();
         applyLanguage();
-        QTimer::singleShot(100, this, &CleanerWindow::scan);
+        QTimer::singleShot(100, this, &CleanerWindow::scanManual);
+        refreshTimer_ = new QTimer(this);
+        refreshTimer_->setInterval(1000);
+        connect(refreshTimer_, &QTimer::timeout, this, &CleanerWindow::refreshScan);
+        refreshTimer_->start();
+        debounceTimer_ = new QTimer(this);
+        debounceTimer_->setSingleShot(true);
+        debounceTimer_->setInterval(1000);
+        connect(debounceTimer_, &QTimer::timeout, this, &CleanerWindow::refreshScan);
+        setupWatchers();
     }
 
 private:
@@ -72,6 +196,10 @@ private:
         QString noAutostarts;
         QString noContainers;
         QString rawLog;
+        QString live;
+        QString updating;
+        QString updated;
+        QString autoRefresh;
     };
 
     static Text zh()
@@ -96,7 +224,7 @@ private:
             QStringLiteral("阶段"),
             QStringLiteral("状态"),
             QStringLiteral("说明"),
-            QStringLiteral("详细日志"),
+            QStringLiteral("错误日志"),
             QStringLiteral("就绪"),
             QStringLiteral("执行中"),
             QStringLiteral("完成"),
@@ -106,7 +234,11 @@ private:
             QStringLiteral("选择要清理的旧版本容器"),
             QStringLiteral("当前没有可禁用的自启动项，或都已经禁用。"),
             QStringLiteral("当前没有发现可安全清理的旧版本容器。"),
-            QStringLiteral("原始输出")
+            QStringLiteral("错误日志"),
+            QStringLiteral("实时状态"),
+            QStringLiteral("正在更新"),
+            QStringLiteral("已更新"),
+            QStringLiteral("窗口可见时每秒刷新，扫描未完成时自动跳过")
         };
     }
 
@@ -132,7 +264,7 @@ private:
             QStringLiteral("Stage"),
             QStringLiteral("Status"),
             QStringLiteral("Detail"),
-            QStringLiteral("Details"),
+            QStringLiteral("Error Log"),
             QStringLiteral("Ready"),
             QStringLiteral("Running"),
             QStringLiteral("Done"),
@@ -142,7 +274,11 @@ private:
             QStringLiteral("Select old container versions to clean"),
             QStringLiteral("No active autostart entries can be disabled, or all are already disabled."),
             QStringLiteral("No safely cleanable old container versions were found."),
-            QStringLiteral("Raw Output")
+            QStringLiteral("Error Log"),
+            QStringLiteral("Live Status"),
+            QStringLiteral("Updating"),
+            QStringLiteral("Updated"),
+            QStringLiteral("Refreshes every second while visible and skips overlapping scans")
         };
     }
 
@@ -150,17 +286,24 @@ private:
 
     void buildUi()
     {
+        setObjectName(QStringLiteral("AppRoot"));
         auto *root = new QVBoxLayout(this);
         root->setContentsMargins(16, 16, 16, 16);
         root->setSpacing(12);
 
-        auto *header = new QHBoxLayout;
+        auto *headerFrame = new QFrame;
+        headerFrame->setObjectName(QStringLiteral("HeaderFrame"));
+        auto *header = new QHBoxLayout(headerFrame);
+        header->setContentsMargins(18, 16, 18, 16);
+        header->setSpacing(10);
         title_ = new QLabel;
+        title_->setObjectName(QStringLiteral("Title"));
         QFont titleFont = title_->font();
         titleFont.setPointSize(titleFont.pointSize() + 5);
         titleFont.setBold(true);
         title_->setFont(titleFont);
         header->addWidget(title_, 1);
+        header->addWidget(new SpaceVisual);
 
         languageLabel_ = new QLabel;
         language_ = new QComboBox;
@@ -175,17 +318,46 @@ private:
         header->addSpacing(16);
         header->addWidget(userLabel_);
         header->addWidget(userValue_);
-        root->addLayout(header);
+        root->addWidget(headerFrame);
 
         intro_ = new QLabel;
+        intro_->setObjectName(QStringLiteral("Intro"));
         intro_->setWordWrap(true);
         root->addWidget(intro_);
 
+        auto *statusFrame = new QFrame;
+        statusFrame->setObjectName(QStringLiteral("StatusFrame"));
+        auto *statusLayout = new QHBoxLayout(statusFrame);
+        statusLayout->setContentsMargins(14, 10, 14, 10);
+        statusLayout->setSpacing(12);
+        statusTitle_ = new QLabel;
+        statusTitle_->setObjectName(QStringLiteral("StatusTitle"));
+        statusSummary_ = new QLabel;
+        statusSummary_->setObjectName(QStringLiteral("StatusSummary"));
+        statusSummary_->setWordWrap(true);
+        lastUpdate_ = new QLabel;
+        lastUpdate_->setObjectName(QStringLiteral("LastUpdate"));
+        progress_ = new QProgressBar;
+        progress_->setObjectName(QStringLiteral("Progress"));
+        progress_->setTextVisible(false);
+        progress_->setFixedWidth(140);
+        progress_->setRange(0, 100);
+        progress_->setValue(100);
+        statusLayout->addWidget(statusTitle_);
+        statusLayout->addWidget(statusSummary_, 1);
+        statusLayout->addWidget(lastUpdate_);
+        statusLayout->addWidget(progress_);
+        root->addWidget(statusFrame);
+
         metrics_ = new QTableWidget(4, 4);
+        metrics_->setObjectName(QStringLiteral("MetricsTable"));
         metrics_->verticalHeader()->hide();
         metrics_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         metrics_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         metrics_->setSelectionMode(QAbstractItemView::NoSelection);
+        metrics_->setAlternatingRowColors(true);
+        metrics_->setShowGrid(false);
+        metrics_->verticalHeader()->setDefaultSectionSize(42);
         root->addWidget(metrics_);
 
         auto *actions = new QHBoxLayout;
@@ -193,6 +365,9 @@ private:
         cleanOldButton_ = new QPushButton;
         autostartButton_ = new QPushButton;
         monitorButton_ = new QPushButton;
+        scanButton_->setObjectName(QStringLiteral("PrimaryButton"));
+        cleanOldButton_->setObjectName(QStringLiteral("ActionButton"));
+        autostartButton_->setObjectName(QStringLiteral("ActionButton"));
         monitorButton_->setEnabled(false);
         actions->addWidget(scanButton_);
         actions->addWidget(cleanOldButton_);
@@ -200,15 +375,19 @@ private:
         actions->addWidget(monitorButton_);
         actions->addStretch(1);
         root->addLayout(actions);
-        connect(scanButton_, &QPushButton::clicked, this, &CleanerWindow::scan);
+        connect(scanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
         connect(autostartButton_, &QPushButton::clicked, this, &CleanerWindow::showAutostartDialog);
         connect(cleanOldButton_, &QPushButton::clicked, this, &CleanerWindow::showContainerDialog);
 
         plan_ = new QTableWidget(0, 3);
+        plan_->setObjectName(QStringLiteral("PlanTable"));
         plan_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         plan_->verticalHeader()->hide();
         plan_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         plan_->setSelectionMode(QAbstractItemView::NoSelection);
+        plan_->setAlternatingRowColors(true);
+        plan_->setShowGrid(false);
+        plan_->verticalHeader()->setDefaultSectionSize(38);
         root->addWidget(plan_, 1);
 
         detailsBox_ = new QGroupBox;
@@ -220,6 +399,93 @@ private:
         log_->setMaximumBlockCount(3000);
         detailsLayout->addWidget(log_);
         root->addWidget(detailsBox_, 1);
+
+        setStyleSheet(QStringLiteral(R"(
+            QWidget#AppRoot { background: #f4f7fb; color: #1f2937; }
+            QFrame#HeaderFrame {
+                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #195ca8, stop:0.55 #2377b8, stop:1 #2d9c8f);
+            }
+            QLabel#Title { color: white; letter-spacing: 0px; }
+            QFrame#HeaderFrame QLabel { color: white; }
+            QLabel#Intro { color: #4b5563; }
+            QFrame#StatusFrame {
+                border: 1px solid #d8e2ee;
+                border-radius: 8px;
+                background: white;
+            }
+            QLabel#StatusTitle { color: #195ca8; font-weight: 700; }
+            QLabel#StatusSummary { color: #111827; font-weight: 600; }
+            QLabel#LastUpdate { color: #6b7280; }
+            QProgressBar#Progress {
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: #eef2f7;
+                min-height: 10px;
+                max-height: 10px;
+            }
+            QProgressBar#Progress::chunk {
+                border-radius: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2d9c8f, stop:1 #2f80ed);
+            }
+            QTableWidget#MetricsTable, QTableWidget#PlanTable {
+                border: 1px solid #d8e2ee;
+                border-radius: 8px;
+                background: white;
+                alternate-background-color: #f8fbff;
+                selection-background-color: #dbeafe;
+            }
+            QHeaderView::section {
+                background: #eaf1f8;
+                color: #334155;
+                border: 0;
+                padding: 8px;
+                font-weight: 700;
+            }
+            QPushButton {
+                min-height: 34px;
+                padding: 0 16px;
+                border-radius: 7px;
+                border: 1px solid #bfd0e0;
+                background: white;
+                color: #1f2937;
+                font-weight: 600;
+            }
+            QPushButton:hover { background: #f0f7ff; border-color: #8bb8e8; }
+            QPushButton:pressed { background: #dbeafe; }
+            QPushButton#PrimaryButton {
+                color: white;
+                border: 1px solid #1f6fbf;
+                background: #2377b8;
+            }
+            QPushButton#PrimaryButton:hover { background: #2f80ed; }
+            QPushButton:disabled {
+                color: #9ca3af;
+                background: #edf1f5;
+                border-color: #d1d5db;
+            }
+            QGroupBox {
+                border: 1px solid #d8e2ee;
+                border-radius: 8px;
+                margin-top: 10px;
+                background: white;
+                color: #334155;
+                font-weight: 700;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 4px;
+            }
+            QPlainTextEdit {
+                border: 0;
+                background: #0f172a;
+                color: #dbeafe;
+                selection-background-color: #2563eb;
+            }
+        )"));
     }
 
     void applyLanguage()
@@ -230,6 +496,7 @@ private:
         languageLabel_->setText(text.language);
         userLabel_->setText(text.user);
         intro_->setText(text.intro);
+        statusTitle_->setText(text.live);
         scanButton_->setText(text.scan);
         cleanOldButton_->setText(text.cleanOld);
         autostartButton_->setText(text.disableAutostart);
@@ -237,6 +504,7 @@ private:
         metrics_->setHorizontalHeaderLabels({text.metric, text.before, text.released, text.current});
         plan_->setHorizontalHeaderLabels({text.stage, text.status, text.detail});
         detailsBox_->setTitle(text.details);
+        updateStatusSummary();
 
         const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
         for (int row = 0; row < names.size(); ++row) {
@@ -290,36 +558,92 @@ private:
 
     void setBusy(bool busy)
     {
+        busy_ = busy;
         scanButton_->setEnabled(!busy);
         cleanOldButton_->setEnabled(!busy);
         autostartButton_->setEnabled(!busy);
+        if (busy) {
+            progress_->setRange(0, 0);
+            lastUpdate_->setText(t().updating);
+        } else {
+            progress_->setRange(0, 100);
+            progress_->setValue(100);
+        }
     }
 
-    void scan()
+    void scanManual()
+    {
+        scanInternal(true);
+    }
+
+    void setupWatchers()
+    {
+        watcher_ = new QFileSystemWatcher(this);
+        const QStringList paths{
+            QStringLiteral("/var/opt/kaiming"),
+            QStringLiteral("/var/opt/kaiming/info"),
+            QStringLiteral("/var/opt/kaiming/layers"),
+            QStringLiteral("/var/opt/kaiming/layers/stable"),
+            QStringLiteral("/sysroot/ostree/pkgs"),
+            QStringLiteral("/opt/kare-applications"),
+            QDir::homePath() + QStringLiteral("/.config/autostart")
+        };
+        for (const QString &path : paths) {
+            if (QFileInfo(path).exists()) {
+                watcher_->addPath(path);
+            }
+        }
+        connect(watcher_, &QFileSystemWatcher::directoryChanged, this, &CleanerWindow::scheduleRefresh);
+        connect(watcher_, &QFileSystemWatcher::fileChanged, this, &CleanerWindow::scheduleRefresh);
+    }
+
+    void scheduleRefresh()
+    {
+        if (!busy_ && isVisible()) {
+            debounceTimer_->start();
+        }
+    }
+
+    void refreshScan()
+    {
+        if (!busy_ && isVisible()) {
+            scanInternal(false);
+        }
+    }
+
+    void scanInternal(bool manual)
     {
         const Text text = t();
         setBusy(true);
-        plan_->setRowCount(0);
-        addPlanRow(text.planned, text.running, language_->currentData().toString() == QStringLiteral("en")
-            ? QStringLiteral("Read space usage, old Kaiming containers, and autostart entries.")
-            : QStringLiteral("读取空间占用、旧 Kaiming 容器和自启动项。"));
-        runProcess({helper_, QStringLiteral("--scan"), QStringLiteral("--user"), user_}, [this](int code, const QByteArray &output) {
+        if (manual) {
+            plan_->setRowCount(0);
+            addPlanRow(text.planned, text.running, language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Read space usage, old Kaiming containers, and autostart entries.")
+                : QStringLiteral("读取空间占用、旧 Kaiming 容器和自启动项。"));
+        }
+        runProcess({helper_, QStringLiteral("--scan"), QStringLiteral("--user"), user_}, [this, manual](int code, const QByteArray &output) {
             const Text text = t();
-            log_->setPlainText(QString::fromLocal8Bit(output));
             if (code != 0) {
+                log_->setPlainText(QString::fromLocal8Bit(output));
                 addPlanRow(text.rawLog, text.failed, QString::fromLocal8Bit(output).left(240));
                 setBusy(false);
                 return;
             }
             const QJsonDocument doc = QJsonDocument::fromJson(output);
             if (!doc.isObject()) {
+                log_->setPlainText(QString::fromLocal8Bit(output));
                 addPlanRow(text.rawLog, text.failed, QStringLiteral("invalid helper JSON"));
                 setBusy(false);
                 return;
             }
+            log_->clear();
             state_ = doc.object();
             updateMetrics();
-            addPlanRow(text.rawLog, text.done, scanSummary());
+            updateStatusSummary();
+            if (manual) {
+                addPlanRow(text.scan, text.done, scanSummary());
+            }
+            animateRefresh();
             setBusy(false);
         });
     }
@@ -349,6 +673,38 @@ private:
             ensureItem(metrics_, row, 2)->setText(QStringLiteral("-"));
             ensureItem(metrics_, row, 3)->setText(fmtBytes(value));
         }
+    }
+
+    void updateStatusSummary()
+    {
+        if (!statusSummary_) {
+            return;
+        }
+        if (state_.isEmpty()) {
+            statusSummary_->setText(t().autoRefresh);
+            return;
+        }
+        statusSummary_->setText(scanSummary());
+        const QString time = state_.value(QStringLiteral("time")).toString();
+        const QDateTime parsed = QDateTime::fromString(time, Qt::ISODate);
+        const QString stamp = parsed.isValid() ? parsed.toLocalTime().toString(QStringLiteral("HH:mm:ss"))
+                                               : QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+        lastUpdate_->setText(t().updated + QStringLiteral(" ") + stamp);
+    }
+
+    void animateRefresh()
+    {
+        auto *effect = new QGraphicsOpacityEffect(metrics_);
+        metrics_->setGraphicsEffect(effect);
+        auto *animation = new QPropertyAnimation(effect, "opacity", metrics_);
+        animation->setDuration(260);
+        animation->setStartValue(0.55);
+        animation->setEndValue(1.0);
+        animation->setEasingCurve(QEasingCurve::OutCubic);
+        connect(animation, &QPropertyAnimation::finished, this, [this]() {
+            metrics_->setGraphicsEffect(nullptr);
+        });
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
     }
 
     void showAutostartDialog()
@@ -480,7 +836,7 @@ private:
         runProcess({helper_, QStringLiteral("--apply-autostart"), QStringLiteral("--user"), user_, QStringLiteral("--entries"), ids.join(QLatin1Char(','))},
                    [this](int code, const QByteArray &output) {
             handleActionResult(code, output);
-            scan();
+            scanInternal(false);
         });
     }
 
@@ -496,20 +852,21 @@ private:
             : QStringLiteral("移动 %1 个旧容器到 DATA 回滚隔离区。").arg(paths.size()));
         runProcess(command, [this](int code, const QByteArray &output) {
             handleActionResult(code, output);
-            scan();
+            scanInternal(false);
         });
     }
 
     void handleActionResult(int code, const QByteArray &output)
     {
         const Text text = t();
-        log_->setPlainText(QString::fromLocal8Bit(output));
         const QJsonDocument doc = QJsonDocument::fromJson(output);
         if (code != 0 || !doc.isObject()) {
+            log_->setPlainText(QString::fromLocal8Bit(output));
             addPlanRow(text.rawLog, text.failed, QString::fromLocal8Bit(output).left(240));
             setBusy(false);
             return;
         }
+        log_->clear();
         int okCount = 0;
         int failCount = 0;
         qint64 released = 0;
@@ -525,7 +882,7 @@ private:
         const QString summary = language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("%1 succeeded, %2 failed, released %3.").arg(okCount).arg(failCount).arg(fmtBytes(released))
             : QStringLiteral("%1 项成功，%2 项失败，释放 %3。").arg(okCount).arg(failCount).arg(fmtBytes(released));
-        addPlanRow(text.rawLog, failCount == 0 ? text.done : text.failed, summary);
+        addPlanRow(text.planned, failCount == 0 ? text.done : text.failed, summary);
         setBusy(false);
     }
 
@@ -551,12 +908,17 @@ private:
     QString user_;
     QString helper_;
     QJsonObject state_;
+    bool busy_ = false;
     QLabel *title_ = nullptr;
     QLabel *languageLabel_ = nullptr;
     QLabel *userLabel_ = nullptr;
     QLabel *userValue_ = nullptr;
     QLabel *intro_ = nullptr;
+    QLabel *statusTitle_ = nullptr;
+    QLabel *statusSummary_ = nullptr;
+    QLabel *lastUpdate_ = nullptr;
     QComboBox *language_ = nullptr;
+    QProgressBar *progress_ = nullptr;
     QTableWidget *metrics_ = nullptr;
     QTableWidget *plan_ = nullptr;
     QPushButton *scanButton_ = nullptr;
@@ -565,6 +927,9 @@ private:
     QPushButton *monitorButton_ = nullptr;
     QGroupBox *detailsBox_ = nullptr;
     QPlainTextEdit *log_ = nullptr;
+    QTimer *refreshTimer_ = nullptr;
+    QTimer *debounceTimer_ = nullptr;
+    QFileSystemWatcher *watcher_ = nullptr;
 };
 
 int main(int argc, char **argv)
@@ -576,4 +941,3 @@ int main(int argc, char **argv)
 }
 
 #include "space_cleaner.moc"
-

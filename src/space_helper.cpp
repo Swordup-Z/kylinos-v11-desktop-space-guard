@@ -12,6 +12,8 @@
 #include <QStorageInfo>
 #include <QTextStream>
 
+#include <future>
+
 #include <unistd.h>
 
 struct AutostartEntry {
@@ -321,19 +323,32 @@ static qint64 directChildDirsBytes(const QString &root, const QStringList &names
 
 static QJsonObject scan(const QString &user)
 {
+    auto rootUsedFuture = std::async(std::launch::async, rootUsedBytes);
+    auto kaimingFuture = std::async(std::launch::async, [] {
+        return duBytes(kKaimingRoot);
+    });
+    auto ostreeFuture = std::async(std::launch::async, [] {
+        return dirsBytesByFindName(QStringLiteral("/sysroot/ostree/pkgs"),
+                                   {QStringLiteral("*-upper"), QStringLiteral("*-tmpupper")});
+    });
+    auto kareFuture = std::async(std::launch::async, [] {
+        return directChildDirsBytes(QStringLiteral("/opt/kare-applications"),
+                                    {QStringLiteral("upper"), QStringLiteral("work")});
+    });
+    auto oldContainersFuture = std::async(std::launch::async, oldContainerCandidates);
+    auto autostartsFuture = std::async(std::launch::async, [user] {
+        return autostartCandidates(user);
+    });
+
     QJsonObject root;
     QJsonObject metrics;
-    metrics.insert(QStringLiteral("root_used"), QString::number(rootUsedBytes()));
-    metrics.insert(QStringLiteral("kaiming"), QString::number(duBytes(kKaimingRoot)));
-    metrics.insert(QStringLiteral("ostree_upper"),
-                   QString::number(dirsBytesByFindName(QStringLiteral("/sysroot/ostree/pkgs"),
-                                                       {QStringLiteral("*-upper"), QStringLiteral("*-tmpupper")})));
-    metrics.insert(QStringLiteral("kare_upper"),
-                   QString::number(directChildDirsBytes(QStringLiteral("/opt/kare-applications"),
-                                                        {QStringLiteral("upper"), QStringLiteral("work")})));
+    metrics.insert(QStringLiteral("root_used"), QString::number(rootUsedFuture.get()));
+    metrics.insert(QStringLiteral("kaiming"), QString::number(kaimingFuture.get()));
+    metrics.insert(QStringLiteral("ostree_upper"), QString::number(ostreeFuture.get()));
+    metrics.insert(QStringLiteral("kare_upper"), QString::number(kareFuture.get()));
     root.insert(QStringLiteral("metrics"), metrics);
-    root.insert(QStringLiteral("oldContainers"), oldContainerCandidates());
-    root.insert(QStringLiteral("autostarts"), autostartCandidates(user));
+    root.insert(QStringLiteral("oldContainers"), oldContainersFuture.get());
+    root.insert(QStringLiteral("autostarts"), autostartsFuture.get());
     root.insert(QStringLiteral("mode"), runCapture(QStringLiteral("mm-cli"), {QStringLiteral("-s")}).trimmed());
     root.insert(QStringLiteral("user"), user);
     root.insert(QStringLiteral("time"), QDateTime::currentDateTime().toString(Qt::ISODate));
