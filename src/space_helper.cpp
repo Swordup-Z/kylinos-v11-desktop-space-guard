@@ -64,7 +64,7 @@ static qint64 duBytes(const QString &path)
 static qint64 rootUsedBytes()
 {
     const QStorageInfo root(QStringLiteral("/"));
-    return root.bytesTotal() > root.bytesAvailable() ? root.bytesTotal() - root.bytesAvailable() : 0;
+    return root.bytesTotal() > root.bytesFree() ? root.bytesTotal() - root.bytesFree() : 0;
 }
 
 static QString homeForUser(const QString &user)
@@ -404,10 +404,16 @@ static QJsonObject scan(const QString &user)
 
     QJsonObject root;
     QJsonObject metrics;
-    metrics.insert(QStringLiteral("root_used"), QString::number(rootUsedFuture.get()));
-    metrics.insert(QStringLiteral("kaiming"), QString::number(kaimingFuture.get()));
-    metrics.insert(QStringLiteral("ostree_upper"), QString::number(ostreeFuture.get()));
-    metrics.insert(QStringLiteral("kare_upper"), QString::number(kareFuture.get()));
+    const qint64 rootUsed = rootUsedFuture.get();
+    const qint64 kaiming = kaimingFuture.get();
+    const qint64 ostreeUpper = ostreeFuture.get();
+    const qint64 kareUpper = kareFuture.get();
+    const qint64 otherRoot = qMax<qint64>(0, rootUsed - kaiming - ostreeUpper - kareUpper);
+    metrics.insert(QStringLiteral("root_used"), QString::number(rootUsed));
+    metrics.insert(QStringLiteral("kaiming"), QString::number(kaiming));
+    metrics.insert(QStringLiteral("ostree_upper"), QString::number(ostreeUpper));
+    metrics.insert(QStringLiteral("kare_upper"), QString::number(kareUpper));
+    metrics.insert(QStringLiteral("root_other"), QString::number(otherRoot));
     root.insert(QStringLiteral("metrics"), metrics);
     root.insert(QStringLiteral("oldContainers"), oldContainersFuture.get());
     root.insert(QStringLiteral("autostarts"), autostartsFuture.get());

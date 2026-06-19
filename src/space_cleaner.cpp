@@ -29,8 +29,14 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTimer>
+#include <QtCharts/QChart>
+#include <QtCharts/QChartView>
+#include <QtCharts/QPieSeries>
+#include <QtCharts/QPieSlice>
 
 #include <cmath>
+
+QT_CHARTS_USE_NAMESPACE
 
 class SpaceVisual : public QWidget {
     Q_OBJECT
@@ -244,8 +250,15 @@ protected:
         painter.setBrush(QColor(28, 31, 36, 10 + static_cast<int>(10 * hover_)));
         painter.drawRoundedRect(rect.adjusted(1, 3 + hover_, -1, -1), 8, 8);
 
-        const QColor background = mixedColor(QColor(255, 255, 255), QColor(248, 251, 253), hover_);
-        const QColor border = mixedColor(QColor(217, 223, 231), QColor(155, 173, 190), hover_);
+        QColor background = mixedColor(QColor(255, 255, 255), QColor(248, 251, 253), hover_);
+        QColor border = mixedColor(QColor(217, 223, 231), QColor(155, 173, 190), hover_);
+        if (objectName() == QStringLiteral("TotalMetricRow")) {
+            background = mixedColor(QColor(248, 250, 252), QColor(239, 244, 248), hover_);
+            border = mixedColor(QColor(132, 146, 160), QColor(82, 96, 110), hover_);
+        } else if (objectName() == QStringLiteral("ChildMetricRow")) {
+            background = mixedColor(QColor(255, 255, 255), QColor(250, 252, 253), hover_);
+            border = mixedColor(QColor(224, 229, 235), QColor(170, 184, 198), hover_);
+        }
         painter.setBrush(background);
         painter.setPen(QPen(border, 1));
         painter.drawRoundedRect(rect.adjusted(0, 0, 0, -2), 8, 8);
@@ -486,6 +499,10 @@ private:
         QString kaiming;
         QString ostree;
         QString kare;
+        QString otherRoot;
+        QString metricsRelation;
+        QString overallTitle;
+        QString explainedUsage;
         QString stage;
         QString status;
         QString detail;
@@ -516,6 +533,7 @@ private:
         QString scanTime;
         QString cleanable;
         QString metricStatus;
+        QString shareOfRoot;
         QString normal;
         QString noCleanable;
         QString active;
@@ -567,6 +585,10 @@ private:
             QStringLiteral("Kaiming"),
             QStringLiteral("ostree 写入层"),
             QStringLiteral("KARE 写入层"),
+            QStringLiteral("其他根分区占用"),
+            QStringLiteral("根分区已用是总量；下面几项是已识别的子项或重点写入层，其他根分区占用包含系统基线、KARE base、普通应用目录、日志和缓存等未单独拆出的内容。"),
+            QStringLiteral("整体空间占用"),
+            QStringLiteral("已识别子项"),
             QStringLiteral("阶段"),
             QStringLiteral("状态"),
             QStringLiteral("说明"),
@@ -597,6 +619,7 @@ private:
             QStringLiteral("扫描时间"),
             QStringLiteral("可清理"),
             QStringLiteral("状态"),
+            QStringLiteral("占根分区"),
             QStringLiteral("正常"),
             QStringLiteral("暂无安全清理项"),
             QStringLiteral("启用"),
@@ -649,6 +672,10 @@ private:
             QStringLiteral("Kaiming"),
             QStringLiteral("ostree Upper"),
             QStringLiteral("KARE Upper"),
+            QStringLiteral("Other Root Usage"),
+            QStringLiteral("Root usage is the total. The rows below are recognized child categories or key writable layers. Other root usage includes the system baseline, KARE base, ordinary app directories, logs, caches, and anything not broken out separately."),
+            QStringLiteral("Overall Space Usage"),
+            QStringLiteral("Recognized Items"),
             QStringLiteral("Stage"),
             QStringLiteral("Status"),
             QStringLiteral("Detail"),
@@ -679,6 +706,7 @@ private:
             QStringLiteral("Scan Time"),
             QStringLiteral("Cleanable"),
             QStringLiteral("Status"),
+            QStringLiteral("Share of Root"),
             QStringLiteral("Normal"),
             QStringLiteral("No safe cleanup candidates"),
             QStringLiteral("Enabled"),
@@ -974,16 +1002,54 @@ private:
         tabs_->setCurrentIndex(0);
         root->addWidget(tabs_);
 
+        auto *overallCard = new CardFrame;
+        overallCard->setObjectName(QStringLiteral("CardFrame"));
+        overallCard->setInteractive(false);
+        auto *overallLayout = new QVBoxLayout(overallCard);
+        overallLayout->setContentsMargins(16, 16, 16, 16);
+        overallLayout->setSpacing(10);
+        overallTitle_ = new QLabel(overallCard);
+        overallTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        overallTitle_->hide();
+        auto *overallScroll = createCardList(&overallRows_, 92);
+        overallScroll->setMaximumHeight(108);
+        overallLayout->addWidget(overallScroll);
+        metricsPageLayout->addWidget(overallCard);
+
         auto *metricsCard = new CardFrame;
         metricsCard->setObjectName(QStringLiteral("CardFrame"));
         metricsCard->setInteractive(false);
         auto *metricsLayout = new QVBoxLayout(metricsCard);
-        metricsLayout->setContentsMargins(16, 14, 16, 16);
+        metricsLayout->setContentsMargins(16, 16, 16, 16);
         metricsLayout->setSpacing(10);
-        metricsTitle_ = new QLabel;
+        metricsTitle_ = new QLabel(metricsCard);
         metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
-        metricsLayout->addWidget(metricsTitle_);
-        auto *metricsScroll = createCardList(&metricsRows_, 270);
+        metricsTitle_->hide();
+        metricsRelation_ = new QLabel(metricsCard);
+        metricsRelation_->setObjectName(QStringLiteral("Intro"));
+        metricsRelation_->setWordWrap(true);
+        metricsRelation_->hide();
+        metricsSeries_ = new QPieSeries;
+        metricsSeries_->setHoleSize(0.52);
+        metricsSeries_->setPieSize(0.82);
+        metricsChart_ = new QChart;
+        metricsChart_->setTheme(QChart::ChartThemeLight);
+        metricsChart_->addSeries(metricsSeries_);
+        metricsChart_->legend()->setVisible(true);
+        metricsChart_->legend()->setAlignment(Qt::AlignRight);
+        metricsChart_->setBackgroundVisible(true);
+        metricsChart_->setBackgroundBrush(QBrush(QColor(251, 252, 253)));
+        metricsChart_->setPlotAreaBackgroundVisible(false);
+        metricsChart_->setBackgroundRoundness(0);
+        metricsChart_->setMargins(QMargins(0, 0, 0, 0));
+        metricsChartView_ = new QChartView(metricsChart_);
+        metricsChartView_->setObjectName(QStringLiteral("MetricChart"));
+        metricsChartView_->setAutoFillBackground(false);
+        metricsChartView_->setRenderHint(QPainter::Antialiasing);
+        metricsChartView_->setMinimumHeight(210);
+        metricsChartView_->setMaximumHeight(230);
+        metricsLayout->addWidget(metricsChartView_);
+        auto *metricsScroll = createCardList(&metricsRows_, 230);
         metricsList_ = metricsScroll->widget();
         metricsLayout->addWidget(metricsScroll);
         metricsPageLayout->addWidget(metricsCard);
@@ -1304,6 +1370,34 @@ private:
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 #1d1d1f, stop:0.48 #596572, stop:1 #9aa7b3);
             }
+            QChartView#MetricChart {
+                border: 1px solid #e1e6ed;
+                border-radius: 8px;
+                background: #fbfcfd;
+            }
+            QFrame#MetricRail {
+                background: transparent;
+            }
+            QFrame#MetricRailLine {
+                background: #c8d0d9;
+                border-radius: 1px;
+            }
+            QProgressBar#TotalMetricBar,
+            QProgressBar#ChildMetricBar {
+                border: 0;
+                border-radius: 4px;
+                background: #e9eef3;
+                min-height: 8px;
+                max-height: 8px;
+            }
+            QProgressBar#TotalMetricBar::chunk {
+                border-radius: 4px;
+                background: #1d1d1f;
+            }
+            QProgressBar#ChildMetricBar::chunk {
+                border-radius: 4px;
+                background: #697684;
+            }
             QCheckBox {
                 color: #1d1d1f;
                 font-weight: 750;
@@ -1428,6 +1522,12 @@ private:
             autostartButton_->setText(text.manageAutostart);
         }
         metricsTitle_->setText(text.metricsTitle);
+        if (overallTitle_) {
+            overallTitle_->setText(text.overallTitle);
+        }
+        if (metricsRelation_) {
+            metricsRelation_->setText(text.metricsRelation);
+        }
         appsTitle_->setText(text.applicationsTitle);
         if (appsRelation_) {
             appsRelation_->setText(text.kaimingRelation);
@@ -1472,6 +1572,7 @@ private:
             updateMetrics();
             updateApplications();
         } else {
+            resetOverallCard();
             resetMetricCards();
             resetApplicationSummary();
             clearRows(appsRows_);
@@ -1529,6 +1630,58 @@ private:
         groupLayout->addWidget(makeLabel(label, QStringLiteral("PillLabel")));
         groupLayout->addWidget(makeLabel(value, QStringLiteral("PillValue")));
         return group;
+    }
+
+    CardFrame *createMetricRow(const QString &name,
+                               const QString &usage,
+                               const QString &cleanable,
+                               const QString &status,
+                               qint64 value,
+                               qint64 rootValue,
+                               bool total)
+    {
+        auto *row = new CardFrame;
+        row->setObjectName(total ? QStringLiteral("TotalMetricRow") : QStringLiteral("ChildMetricRow"));
+        row->setInteractive(true);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(14, total ? 10 : 8, 14, total ? 10 : 8);
+        layout->setSpacing(12);
+
+        if (!total) {
+            auto *rail = new QFrame;
+            rail->setObjectName(QStringLiteral("MetricRail"));
+            rail->setFixedWidth(22);
+            auto *railLayout = new QVBoxLayout(rail);
+            railLayout->setContentsMargins(9, 0, 9, 0);
+            auto *line = new QFrame;
+            line->setObjectName(QStringLiteral("MetricRailLine"));
+            line->setFixedWidth(2);
+            railLayout->addWidget(line);
+            layout->addWidget(rail);
+        }
+
+        auto *main = new QVBoxLayout;
+        main->setSpacing(7);
+        auto *title = makeLabel(total ? name + QStringLiteral("  ·  总计") : name, QStringLiteral("RowTitle"));
+        main->addWidget(title);
+
+        auto *bar = new QProgressBar;
+        bar->setObjectName(total ? QStringLiteral("TotalMetricBar") : QStringLiteral("ChildMetricBar"));
+        bar->setTextVisible(false);
+        bar->setRange(0, 1000);
+        const int percentValue = rootValue > 0 ? static_cast<int>(qBound<qint64>(0, value * 1000 / rootValue, 1000)) : (total ? 1000 : 0);
+        bar->setValue(total ? 1000 : percentValue);
+        main->addWidget(bar);
+        layout->addLayout(main, 3);
+
+        const Text text = t();
+        const QString percent = rootValue > 0
+            ? QString::number(value * 100.0 / rootValue, 'f', total ? 0 : 1) + QLatin1Char('%')
+            : QStringLiteral("-");
+        layout->addWidget(createValuePill(text.before, usage), 1);
+        layout->addWidget(createValuePill(text.released, cleanable), 1);
+        layout->addWidget(createValuePill(total ? text.metricStatus : text.shareOfRoot, total ? status : percent), 1);
+        return row;
     }
 
     ClickableCardFrame *createInfoRow(const QString &title,
@@ -1610,13 +1763,41 @@ private:
     {
         const Text text = t();
         clearRows(metricsRows_);
-        const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
+        clearMetricChart();
+        const QStringList names{text.kaiming, text.ostree, text.kare, text.otherRoot};
         for (const QString &name : names) {
             addMetricCard(name, text.pendingScan, QStringLiteral("-"), text.pendingScan);
         }
     }
 
+    void resetOverallCard()
+    {
+        const Text text = t();
+        clearRows(overallRows_);
+        if (!overallRows_) {
+            return;
+        }
+        if (overallRows_->count() > 0 && overallRows_->itemAt(overallRows_->count() - 1)->spacerItem()) {
+            delete overallRows_->takeAt(overallRows_->count() - 1);
+        }
+        overallRows_->addWidget(createInfoRow(text.rootUsed,
+                                              {text.before, text.explainedUsage, text.otherRoot},
+                                              {text.pendingScan, text.pendingScan, text.pendingScan}));
+        overallRows_->addStretch(1);
+    }
+
     void addMetricCard(const QString &name, const QString &usage, const QString &cleanable, const QString &status)
+    {
+        addMetricCard(name, usage, cleanable, status, 0, 0, false);
+    }
+
+    void addMetricCard(const QString &name,
+                       const QString &usage,
+                       const QString &cleanable,
+                       const QString &status,
+                       qint64 value,
+                       qint64 rootValue,
+                       bool total)
     {
         if (!metricsRows_) {
             return;
@@ -1624,11 +1805,54 @@ private:
         if (metricsRows_->count() > 0 && metricsRows_->itemAt(metricsRows_->count() - 1)->spacerItem()) {
             delete metricsRows_->takeAt(metricsRows_->count() - 1);
         }
-        const Text text = t();
-        metricsRows_->addWidget(createInfoRow(name,
-                                             {text.before, text.released, text.metricStatus},
-                                             {usage, cleanable, status}));
+        metricsRows_->addWidget(createMetricRow(name, usage, cleanable, status, value, rootValue, total));
         metricsRows_->addStretch(1);
+    }
+
+    void clearMetricChart()
+    {
+        if (!metricsSeries_) {
+            return;
+        }
+        metricsSeries_->clear();
+        metricsSeries_->append(t().pendingScan, 1.0);
+        if (QPieSlice *slice = metricsSeries_->slices().isEmpty() ? nullptr : metricsSeries_->slices().first()) {
+            slice->setColor(QColor(203, 211, 221));
+            slice->setBorderColor(QColor(203, 211, 221));
+            slice->setLabelVisible(false);
+        }
+    }
+
+    void updateMetricChart(const QStringList &names, const QList<qint64> &values, qint64 rootValue)
+    {
+        if (!metricsSeries_) {
+            return;
+        }
+        metricsSeries_->clear();
+        const QList<QColor> colors{
+            QColor(29, 31, 36),
+            QColor(92, 105, 118),
+            QColor(130, 145, 158),
+            QColor(181, 190, 199)
+        };
+        for (int i = 0; i < names.size() && i < values.size(); ++i) {
+            const qint64 value = qMax<qint64>(0, values.at(i));
+            if (value == 0) {
+                continue;
+            }
+            QPieSlice *slice = metricsSeries_->append(names.at(i), static_cast<qreal>(value));
+            const QColor color = colors.at(i % colors.size());
+            slice->setColor(color);
+            slice->setBorderColor(QColor(255, 255, 255));
+            const QString percent = rootValue > 0
+                ? QString::number(value * 100.0 / rootValue, 'f', 1) + QLatin1Char('%')
+                : QStringLiteral("-");
+            slice->setLabel(names.at(i) + QStringLiteral(" ") + percent);
+            slice->setLabelVisible(true);
+        }
+        if (metricsSeries_->slices().isEmpty()) {
+            clearMetricChart();
+        }
     }
 
     void addApplicationCard(int row, const QJsonObject &app)
@@ -1940,20 +2164,40 @@ private:
     {
         const Text text = t();
         const QJsonObject metrics = state_.value(QStringLiteral("metrics")).toObject();
-        const QStringList keys{QStringLiteral("root_used"), QStringLiteral("kaiming"), QStringLiteral("ostree_upper"), QStringLiteral("kare_upper")};
-        const QStringList names{text.rootUsed, text.kaiming, text.ostree, text.kare};
+        const qint64 rootValue = jsonInt64(metrics, QStringLiteral("root_used"));
+        const QStringList keys{QStringLiteral("kaiming"), QStringLiteral("ostree_upper"), QStringLiteral("kare_upper"), QStringLiteral("root_other")};
+        const QStringList names{text.kaiming, text.ostree, text.kare, text.otherRoot};
+        QList<qint64> values;
+        qint64 explained = 0;
+        for (const QString &key : keys) {
+            const qint64 value = jsonInt64(metrics, key);
+            values << value;
+            explained += value;
+        }
+        resetOverallCard();
+        if (overallRows_ && overallRows_->count() > 0 && overallRows_->itemAt(overallRows_->count() - 1)->spacerItem()) {
+            delete overallRows_->takeAt(overallRows_->count() - 1);
+        }
+        clearRows(overallRows_);
+        if (overallRows_) {
+            overallRows_->addWidget(createInfoRow(text.rootUsed,
+                                                  {text.before, text.explainedUsage, text.otherRoot},
+                                                  {fmtBytes(rootValue), fmtBytes(explained - values.value(3)), fmtBytes(values.value(3))}));
+            overallRows_->addStretch(1);
+        }
+        updateMetricChart(names, values, rootValue);
         const qint64 oldContainerBytes = oldContainersBytes();
         clearRows(metricsRows_);
         for (int row = 0; row < keys.size(); ++row) {
-            const qint64 value = jsonInt64(metrics, keys.at(row));
-            const QString cleanable = row == 1 ? fmtBytes(oldContainerBytes) : QStringLiteral("-");
+            const qint64 value = values.at(row);
+            const QString cleanable = row == 0 ? fmtBytes(oldContainerBytes) : QStringLiteral("-");
             QString status;
-            if (row == 1) {
+            if (row == 0) {
                 status = oldContainerBytes > 0 ? text.cleanable : text.noCleanable;
             } else {
                 status = text.normal;
             }
-            addMetricCard(names.at(row), fmtBytes(value), cleanable, status);
+            addMetricCard(names.at(row), fmtBytes(value), cleanable, status, value, rootValue, false);
         }
     }
 
@@ -2476,7 +2720,9 @@ private:
     QStackedWidget *statusStack_ = nullptr;
     QStackedWidget *appsStack_ = nullptr;
     QStackedWidget *scanStack_ = nullptr;
+    QLabel *overallTitle_ = nullptr;
     QLabel *metricsTitle_ = nullptr;
+    QLabel *metricsRelation_ = nullptr;
     QLabel *appsTitle_ = nullptr;
     QLabel *appsRelation_ = nullptr;
     QLabel *detailTitle_ = nullptr;
@@ -2491,6 +2737,10 @@ private:
     QWidget *detailList_ = nullptr;
     QWidget *planList_ = nullptr;
     QWidget *optimizationList_ = nullptr;
+    QChartView *metricsChartView_ = nullptr;
+    QChart *metricsChart_ = nullptr;
+    QPieSeries *metricsSeries_ = nullptr;
+    QVBoxLayout *overallRows_ = nullptr;
     QVBoxLayout *metricsRows_ = nullptr;
     QVBoxLayout *appsSummaryRows_ = nullptr;
     QVBoxLayout *appsRows_ = nullptr;
