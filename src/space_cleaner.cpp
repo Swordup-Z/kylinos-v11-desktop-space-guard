@@ -531,6 +531,11 @@ private:
         QString path;
         QString currentLayer;
         QString inUse;
+        QString appSummaryTitle;
+        QString appTotal;
+        QString totalContainers;
+        QString appContainersUsage;
+        QString kaimingRelation;
     };
 
     static Text zh()
@@ -606,7 +611,12 @@ private:
             QStringLiteral("版本"),
             QStringLiteral("路径"),
             QStringLiteral("当前引用"),
-            QStringLiteral("使用中")
+            QStringLiteral("使用中"),
+            QStringLiteral("应用容器统计"),
+            QStringLiteral("应用数"),
+            QStringLiteral("容器数"),
+            QStringLiteral("容器合计"),
+            QStringLiteral("应用容器是 Kaiming 占用的应用级明细；Kaiming 还可能包含运行时、缓存和管理数据，因此两者不会总是相等。")
         };
     }
 
@@ -683,7 +693,12 @@ private:
             QStringLiteral("Version"),
             QStringLiteral("Path"),
             QStringLiteral("Current"),
-            QStringLiteral("In Use")
+            QStringLiteral("In Use"),
+            QStringLiteral("Application Container Summary"),
+            QStringLiteral("Applications"),
+            QStringLiteral("Containers"),
+            QStringLiteral("Container Total"),
+            QStringLiteral("Application containers are the app-level breakdown inside Kaiming usage. Kaiming may also include runtimes, caches, indexes, and management data, so the totals do not always match.")
         };
     }
 
@@ -993,6 +1008,13 @@ private:
         appsTitle_ = new QLabel;
         appsTitle_->setObjectName(QStringLiteral("SectionTitle"));
         appsLayout->addWidget(appsTitle_);
+        appsRelation_ = new QLabel;
+        appsRelation_->setObjectName(QStringLiteral("Intro"));
+        appsRelation_->setWordWrap(true);
+        appsLayout->addWidget(appsRelation_);
+        auto *appsSummaryScroll = createCardList(&appsSummaryRows_, 88);
+        appsSummaryScroll->setMaximumHeight(104);
+        appsLayout->addWidget(appsSummaryScroll);
         auto *appsScroll = createCardList(&appsRows_, 380);
         appsList_ = appsScroll->widget();
         appsLayout->addWidget(appsScroll);
@@ -1407,6 +1429,9 @@ private:
         }
         metricsTitle_->setText(text.metricsTitle);
         appsTitle_->setText(text.applicationsTitle);
+        if (appsRelation_) {
+            appsRelation_->setText(text.kaimingRelation);
+        }
         if (metricsPageButton_) {
             metricsPageButton_->setText(text.metricsTitle);
         }
@@ -1448,6 +1473,7 @@ private:
             updateApplications();
         } else {
             resetMetricCards();
+            resetApplicationSummary();
             clearRows(appsRows_);
         }
     }
@@ -1625,6 +1651,47 @@ private:
         });
         appsRows_->addWidget(card);
         appsRows_->addStretch(1);
+    }
+
+    void resetApplicationSummary()
+    {
+        const Text text = t();
+        clearRows(appsSummaryRows_);
+        if (!appsSummaryRows_) {
+            return;
+        }
+        if (appsSummaryRows_->count() > 0 && appsSummaryRows_->itemAt(appsSummaryRows_->count() - 1)->spacerItem()) {
+            delete appsSummaryRows_->takeAt(appsSummaryRows_->count() - 1);
+        }
+        appsSummaryRows_->addWidget(createInfoRow(text.appSummaryTitle,
+                                                  {text.appTotal, text.totalContainers, text.appContainersUsage},
+                                                  {text.pendingScan, text.pendingScan, text.pendingScan}));
+        appsSummaryRows_->addStretch(1);
+    }
+
+    void updateApplicationSummary(const QJsonArray &applications)
+    {
+        const Text text = t();
+        int containerCount = 0;
+        qint64 totalBytes = 0;
+        for (const QJsonValue &value : applications) {
+            const QJsonObject app = value.toObject();
+            containerCount += app.value(QStringLiteral("containerCount")).toInt();
+            totalBytes += jsonInt64(app, QStringLiteral("bytes"));
+        }
+        clearRows(appsSummaryRows_);
+        if (!appsSummaryRows_) {
+            return;
+        }
+        if (appsSummaryRows_->count() > 0 && appsSummaryRows_->itemAt(appsSummaryRows_->count() - 1)->spacerItem()) {
+            delete appsSummaryRows_->takeAt(appsSummaryRows_->count() - 1);
+        }
+        appsSummaryRows_->addWidget(createInfoRow(text.appSummaryTitle,
+                                                  {text.appTotal, text.totalContainers, text.appContainersUsage},
+                                                  {QString::number(applications.size()),
+                                                   QString::number(containerCount),
+                                                   fmtBytes(totalBytes)}));
+        appsSummaryRows_->addStretch(1);
     }
 
     static qint64 jsonInt64(const QJsonObject &object, const QString &key)
@@ -1893,6 +1960,7 @@ private:
     void updateApplications()
     {
         const QJsonArray applications = state_.value(QStringLiteral("applications")).toArray();
+        updateApplicationSummary(applications);
         clearRows(appsRows_);
         for (int row = 0; row < applications.size(); ++row) {
             const QJsonObject app = applications.at(row).toObject();
@@ -2410,6 +2478,7 @@ private:
     QStackedWidget *scanStack_ = nullptr;
     QLabel *metricsTitle_ = nullptr;
     QLabel *appsTitle_ = nullptr;
+    QLabel *appsRelation_ = nullptr;
     QLabel *detailTitle_ = nullptr;
     QLabel *actionsTitle_ = nullptr;
     QLabel *resultTitle_ = nullptr;
@@ -2423,6 +2492,7 @@ private:
     QWidget *planList_ = nullptr;
     QWidget *optimizationList_ = nullptr;
     QVBoxLayout *metricsRows_ = nullptr;
+    QVBoxLayout *appsSummaryRows_ = nullptr;
     QVBoxLayout *appsRows_ = nullptr;
     QVBoxLayout *detailRows_ = nullptr;
     QVBoxLayout *planRows_ = nullptr;
