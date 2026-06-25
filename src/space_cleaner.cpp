@@ -1168,9 +1168,9 @@ private:
             QStringLiteral("容器数"),
             QStringLiteral("总占用"),
             QStringLiteral("容器明细"),
-            QStringLiteral("模块"),
+            QStringLiteral("信息类型"),
             QStringLiteral("版本"),
-            QStringLiteral("路径"),
+            QStringLiteral("系统路径"),
             QStringLiteral("当前引用"),
             QStringLiteral("正在使用"),
             QStringLiteral("应用容器统计"),
@@ -1258,9 +1258,9 @@ private:
             QStringLiteral("Containers"),
             QStringLiteral("Total Size"),
             QStringLiteral("Container Details"),
-            QStringLiteral("Module"),
+            QStringLiteral("Info Type"),
             QStringLiteral("Version"),
-            QStringLiteral("Path"),
+            QStringLiteral("System Path"),
             QStringLiteral("Current"),
             QStringLiteral("In Use"),
             QStringLiteral("Application Container Summary"),
@@ -2227,6 +2227,22 @@ private:
             QFrame#ContainerRow QLabel#RowTitle {
                 color: #ffffff;
             }
+            QFrame#ContainerRow QLabel#ContainerTitle {
+                color: #ffffff;
+                font-size: 18px;
+                font-weight: 900;
+            }
+            QFrame#ContainerRow QFrame#ValuePill {
+                min-height: 52px;
+            }
+            QFrame#ContainerRow QLabel#PillLabel {
+                font-size: 12px;
+                font-weight: 800;
+            }
+            QFrame#ContainerRow QLabel#PillValue {
+                font-size: 16px;
+                font-weight: 900;
+            }
             QLabel#TaskMark {
                 border-radius: 8px;
                 background: #24e6b8;
@@ -3158,29 +3174,36 @@ private:
         auto *row = new CardFrame;
         row->setObjectName(QStringLiteral("ContainerRow"));
         row->setInteractive(false);
+        row->setMinimumHeight(176);
         auto *layout = new QVBoxLayout(row);
-        layout->setContentsMargins(14, 10, 14, 10);
-        layout->setSpacing(10);
+        layout->setContentsMargins(18, 14, 18, 14);
+        layout->setSpacing(12);
 
-        auto *title = makeLabel(item.value(QStringLiteral("module")).toString(), QStringLiteral("RowTitle"));
+        const QString module = displayModuleName(item.value(QStringLiteral("module")).toString());
+        auto *title = makeLabel(module, QStringLiteral("ContainerTitle"));
         layout->addWidget(title);
 
-        auto *meta = new QHBoxLayout;
-        meta->setSpacing(10);
         const bool english = language_->currentData().toString() == QStringLiteral("en");
         const QString yesValue = english ? QStringLiteral("Yes") : QStringLiteral("是");
         const QString noValue = english ? QStringLiteral("No") : QStringLiteral("否");
-        meta->addWidget(createValuePill(text.version, item.value(QStringLiteral("version")).toString()), 1);
-        meta->addWidget(createValuePill(text.appSize, fmtBytes(jsonInt64(item, QStringLiteral("bytes")))), 1);
-        meta->addWidget(createValuePill(text.currentLayer, item.value(QStringLiteral("current")).toBool() ? yesValue : noValue), 1);
-        meta->addWidget(createValuePill(text.inUse, item.value(QStringLiteral("inUse")).toBool() ? yesValue : noValue), 1);
-        layout->addLayout(meta);
+        auto *firstRow = new QHBoxLayout;
+        firstRow->setSpacing(10);
+        firstRow->addWidget(createValuePill(text.module, module, true), 1);
+        firstRow->addWidget(createValuePill(text.version, item.value(QStringLiteral("version")).toString(), true), 1);
+        layout->addLayout(firstRow);
+
+        auto *secondRow = new QHBoxLayout;
+        secondRow->setSpacing(10);
+        secondRow->addWidget(createValuePill(text.appSize, fmtBytes(jsonInt64(item, QStringLiteral("bytes"))), true), 1);
+        secondRow->addWidget(createValuePill(text.currentLayer, item.value(QStringLiteral("current")).toBool() ? yesValue : noValue, true), 1);
+        secondRow->addWidget(createValuePill(text.inUse, item.value(QStringLiteral("inUse")).toBool() ? yesValue : noValue, true), 1);
+        layout->addLayout(secondRow);
 
         auto *pathFrame = new QFrame;
         pathFrame->setObjectName(QStringLiteral("PathPill"));
         auto *pathLayout = new QVBoxLayout(pathFrame);
-        pathLayout->setContentsMargins(10, 6, 10, 6);
-        pathLayout->setSpacing(3);
+        pathLayout->setContentsMargins(12, 8, 12, 8);
+        pathLayout->setSpacing(4);
         pathLayout->addWidget(makeLabel(text.path, QStringLiteral("PillLabel")));
         pathLayout->addWidget(makeLabel(item.value(QStringLiteral("path")).toString(), QStringLiteral("PathValue")));
         layout->addWidget(pathFrame);
@@ -3514,6 +3537,21 @@ private:
         bool ok = false;
         const qint64 value = object.value(key).toString().toLongLong(&ok);
         return ok ? value : static_cast<qint64>(object.value(key).toDouble(0));
+    }
+
+    QString displayModuleName(const QString &module) const
+    {
+        const bool english = language_->currentData().toString() == QStringLiteral("en");
+        if (module == QStringLiteral("binary")) {
+            return english ? QStringLiteral("App file info") : QStringLiteral("应用文件信息");
+        }
+        if (module == QStringLiteral("runtime")) {
+            return english ? QStringLiteral("Runtime info") : QStringLiteral("运行环境信息");
+        }
+        if (module == QStringLiteral("base")) {
+            return english ? QStringLiteral("Base file info") : QStringLiteral("基础文件信息");
+        }
+        return module;
     }
 
     static QString fmtBytes(qint64 bytes)
