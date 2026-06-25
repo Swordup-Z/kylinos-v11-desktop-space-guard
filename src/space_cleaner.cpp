@@ -283,7 +283,7 @@ protected:
         blendedThemeIndex_ = eased >= 1.0 ? targetTheme_ : sourceTheme_;
 
         QPainterPath shape;
-        shape.addRoundedRect(rect, 8, 8);
+        shape.addRoundedRect(rect, 18, 18);
         painter.setClipPath(shape);
 
         QLinearGradient base(rect.topLeft(), rect.bottomRight());
@@ -324,7 +324,7 @@ protected:
         painter.setClipping(false);
         painter.setPen(QPen(QColor(255, 255, 255, 44), 1));
         painter.setBrush(Qt::NoBrush);
-        painter.drawRoundedRect(rect, 8, 8);
+        painter.drawRoundedRect(rect, 18, 18);
     }
 
 private:
@@ -413,7 +413,7 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         const QRectF rect = QRectF(0.5, 0.5, width() - 1, height() - 1);
-        if (objectName() == QStringLiteral("RootOverviewCard")) {
+        if (objectName() == QStringLiteral("RootOverviewCard") || objectName() == QStringLiteral("ButtonOnlyRow")) {
             return;
         }
         const int theme = qApp ? qApp->property("spaceGuardTheme").toInt() : 0;
@@ -994,7 +994,7 @@ protected:
         gradient.setColorAt(1.0, b);
         painter.setPen(Qt::NoPen);
         painter.setBrush(gradient);
-        painter.drawRoundedRect(rect, 8, 8);
+        painter.drawRoundedRect(rect, 18, 18);
     }
 
 private:
@@ -1111,7 +1111,7 @@ private:
             QStringLiteral("重新扫描"),
             QStringLiteral("可优化条目"),
             QStringLiteral("旧版本容器清理"),
-            QStringLiteral("自启动项优化"),
+            QStringLiteral("自启动项"),
             QStringLiteral("项目"),
             QStringLiteral("当前占用"),
             QStringLiteral("可清理"),
@@ -1201,7 +1201,7 @@ private:
             QStringLiteral("Rescan"),
             QStringLiteral("Optimization Items"),
             QStringLiteral("Old Container Cleanup"),
-            QStringLiteral("Autostart Entry Optimization"),
+            QStringLiteral("Autostart Entries"),
             QStringLiteral("Item"),
             QStringLiteral("Current Usage"),
             QStringLiteral("Cleanable"),
@@ -1282,6 +1282,7 @@ private:
     static constexpr int kNavigationButtonWidth = 272;
     static constexpr int kAutostartPillWidth = 128;
     static constexpr int kAutostartDetailButtonWidth = kCompactButtonWidth * 2;
+    static constexpr int kAutostartRowControlHeight = 50;
     static constexpr int kToolbarButtonHeight = 50;
     static constexpr int kToolbarSecondaryButtonWidth = 132;
     static constexpr int kToolbarPrimaryButtonWidth = 178;
@@ -1411,8 +1412,8 @@ private:
         auto *content = new QWidget;
         content->setObjectName(QStringLiteral("ContentPane"));
         auto *shell = new QHBoxLayout(content);
-        shell->setContentsMargins(14, 0, 14, 14);
-        shell->setSpacing(14);
+        shell->setContentsMargins(22, 4, 22, 22);
+        shell->setSpacing(18);
         shellRoot->addWidget(content, 1);
 
         sideBar_ = new QFrame;
@@ -1449,7 +1450,7 @@ private:
         workspace->setObjectName(QStringLiteral("Workspace"));
         auto *root = new QVBoxLayout(workspace);
         root->setContentsMargins(0, 0, 0, 0);
-        root->setSpacing(12);
+        root->setSpacing(16);
         shell->addWidget(workspace, 1);
 
         topBarFrame_ = new QFrame;
@@ -2110,7 +2111,7 @@ private:
         setStyleSheet(QStringLiteral(R"(
             QWidget#AppRoot { background: transparent; color: #f8f4ff; }
             QFrame#AppShellCard {
-                border-radius: 8px;
+                border-radius: 18px;
                 border: 0;
                 background: transparent;
             }
@@ -2254,6 +2255,26 @@ private:
                 border-radius: 9px;
                 background: rgba(255, 255, 255, 0.10);
                 min-height: 42px;
+            }
+            QFrame#ProminentStatusRow QLabel#RowTitle {
+                font-size: 18px;
+                font-weight: 900;
+            }
+            QFrame#ProminentStatusPill {
+                border: 1px solid rgba(255, 255, 255, 0.24);
+                border-radius: 12px;
+                background: rgba(255, 255, 255, 0.14);
+                min-height: 68px;
+            }
+            QFrame#ProminentStatusPill QLabel#PillLabel {
+                color: #eadcff;
+                font-size: 13px;
+                font-weight: 820;
+            }
+            QFrame#ProminentStatusPill QLabel#PillValue {
+                color: #ffffff;
+                font-size: 22px;
+                font-weight: 920;
             }
             QFrame#AppSummaryRow {
                 border: 1px solid rgba(66, 235, 213, 0.36);
@@ -2399,6 +2420,21 @@ private:
                 font-weight: 760;
             }
             QPushButton#TaskDetailButton:hover {
+                background: rgba(255, 255, 255, 0.24);
+                border-color: rgba(255, 255, 255, 0.46);
+            }
+            QPushButton#WideRowButton {
+                min-height: 56px;
+                max-height: 56px;
+                padding: 0 22px;
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.26);
+                background: rgba(255, 255, 255, 0.16);
+                color: #ffffff;
+                font-size: 15px;
+                font-weight: 820;
+            }
+            QPushButton#WideRowButton:hover {
                 background: rgba(255, 255, 255, 0.24);
                 border-color: rgba(255, 255, 255, 0.46);
             }
@@ -2697,6 +2733,9 @@ private:
         if (!state_.isEmpty()) {
             updateMetrics();
             updateApplications();
+            if (tabs_ && scanStack_ && tabs_->currentIndex() == 1 && scanStack_->currentIndex() == 2) {
+                restoreReviewPage(activeReviewFilter_, activeReviewPageMode_);
+            }
         } else {
             resetOverallCard();
             resetMetricCards();
@@ -2746,7 +2785,7 @@ private:
         layout->addStretch(1);
     }
 
-    QFrame *createValuePill(const QString &label, const QString &value)
+    QFrame *createValuePill(const QString &label, const QString &value, bool centered = false)
     {
         auto *group = new QFrame;
         group->setObjectName(QStringLiteral("ValuePill"));
@@ -2754,8 +2793,14 @@ private:
         auto *groupLayout = new QVBoxLayout(group);
         groupLayout->setContentsMargins(10, 4, 10, 4);
         groupLayout->setSpacing(2);
-        groupLayout->addWidget(makeLabel(label, QStringLiteral("PillLabel")));
-        groupLayout->addWidget(makeLabel(value, QStringLiteral("PillValue")));
+        auto *labelWidget = makeLabel(label, QStringLiteral("PillLabel"));
+        auto *valueWidget = makeLabel(value, QStringLiteral("PillValue"));
+        if (centered) {
+            labelWidget->setAlignment(Qt::AlignCenter);
+            valueWidget->setAlignment(Qt::AlignCenter);
+        }
+        groupLayout->addWidget(labelWidget);
+        groupLayout->addWidget(valueWidget);
         return group;
     }
 
@@ -2850,15 +2895,22 @@ private:
 
     ClickableCardFrame *createStatusCardRow(const QString &title,
                                             const QStringList &labels,
-                                            const QStringList &values)
+                                            const QStringList &values,
+                                            bool prominent = false)
     {
         auto *row = new ClickableCardFrame;
-        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setObjectName(prominent ? QStringLiteral("ProminentStatusRow") : QStringLiteral("InfoRow"));
         row->setInteractive(false);
         row->setCursor(Qt::ArrowCursor);
+        if (prominent) {
+            row->setMinimumHeight(126);
+        }
         auto *layout = new QVBoxLayout(row);
-        layout->setContentsMargins(14, 10, 14, 10);
-        layout->setSpacing(10);
+        layout->setContentsMargins(prominent ? 20 : 14,
+                                   prominent ? 16 : 10,
+                                   prominent ? 20 : 14,
+                                   prominent ? 16 : 10);
+        layout->setSpacing(prominent ? 14 : 10);
 
         auto *titleLabel = makeLabel(title, QStringLiteral("RowTitle"));
         layout->addWidget(titleLabel);
@@ -2867,7 +2919,11 @@ private:
         pillLayout->setSpacing(12);
 
         for (int i = 0; i < values.size(); ++i) {
-            QFrame *pill = createValuePill(labels.value(i), values.at(i));
+            QFrame *pill = createValuePill(labels.value(i), values.at(i), true);
+            if (prominent) {
+                pill->setObjectName(QStringLiteral("ProminentStatusPill"));
+                pill->setMinimumHeight(68);
+            }
             pill->setMinimumWidth(values.size() == 1 ? 360 : 0);
             pillLayout->addWidget(pill, 1, Qt::AlignVCenter);
         }
@@ -2935,6 +2991,52 @@ private:
         return row;
     }
 
+    ClickableCardFrame *createLargeNavigationButtonRow(const QString &buttonText,
+                                                       const std::function<void()> &action)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("ButtonOnlyRow"));
+        row->setInteractive(true);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 8, 0, 8);
+        layout->setSpacing(0);
+
+        auto *button = new QPushButton(buttonText);
+        button->setObjectName(QStringLiteral("PrimaryButton"));
+        button->setIcon(style()->standardIcon(QStyle::SP_ArrowForward));
+        button->setIconSize(QSize(20, 20));
+        applyButtonMetrics(button, 0, false, 72);
+        layout->addWidget(button, 1);
+
+        connect(row, &ClickableCardFrame::clicked, this, action);
+        connect(button, &QPushButton::clicked, this, action);
+        return row;
+    }
+
+    ClickableCardFrame *createFullWidthButtonRow(const QString &buttonText,
+                                                 const std::function<void()> &action,
+                                                 QStyle::StandardPixmap icon,
+                                                 int height = 56)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("ButtonOnlyRow"));
+        row->setInteractive(true);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(0, 4, 0, 4);
+        layout->setSpacing(0);
+
+        auto *button = new QPushButton(buttonText);
+        button->setObjectName(QStringLiteral("WideRowButton"));
+        button->setIcon(style()->standardIcon(icon));
+        button->setIconSize(QSize(18, 18));
+        applyButtonMetrics(button, 0, false, height);
+        layout->addWidget(button, 1);
+
+        connect(row, &ClickableCardFrame::clicked, this, action);
+        connect(button, &QPushButton::clicked, this, action);
+        return row;
+    }
+
     CardFrame *createSecondaryOptimizationToolbar(const QString &summaryText)
     {
         auto *row = new CardFrame;
@@ -2946,7 +3048,8 @@ private:
 
         auto *summary = makeLabel(summaryText, QStringLiteral("PathValue"));
         summary->setWordWrap(true);
-        layout->addWidget(summary, 1);
+        summary->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        layout->addWidget(summary, 1, Qt::AlignTop);
 
         secondarySelectAllButton_ = new QPushButton(language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("Select all")
@@ -3005,8 +3108,9 @@ private:
         title->setToolTip(localDescription(item));
         layout->addWidget(title, 1);
 
-        QFrame *statusPill = createValuePill(text.status, enabled ? text.active : text.disabled);
+        QFrame *statusPill = createValuePill(text.status, enabled ? text.active : text.disabled, true);
         statusPill->setFixedWidth(kAutostartPillWidth);
+        statusPill->setFixedHeight(kAutostartRowControlHeight);
         layout->addWidget(statusPill, 0, Qt::AlignVCenter);
 
         const QString detailText = language_->currentData().toString() == QStringLiteral("en")
@@ -3014,7 +3118,7 @@ private:
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth);
+        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth, true, kAutostartRowControlHeight);
         layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
         const QString detail = (language_->currentData().toString() == QStringLiteral("en")
@@ -3177,13 +3281,16 @@ private:
         box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         layout->addWidget(box, 1);
 
-        QFrame *statusPill = createValuePill(t().status, currentLabel);
+        QFrame *statusPill = createValuePill(t().status, currentLabel, true);
         QFrame *actionPill = createValuePill(language_->currentData().toString() == QStringLiteral("en")
-                                                 ? QStringLiteral("Action")
-                                                 : QStringLiteral("动作"),
-                                             actionLabel);
+                                                 ? QStringLiteral("On Select")
+                                                 : QStringLiteral("选中后"),
+                                             actionLabel,
+                                             true);
         statusPill->setFixedWidth(kAutostartPillWidth);
         actionPill->setFixedWidth(kAutostartPillWidth);
+        statusPill->setFixedHeight(kAutostartRowControlHeight);
+        actionPill->setFixedHeight(kAutostartRowControlHeight);
         layout->addWidget(statusPill, 0, Qt::AlignVCenter);
         layout->addWidget(actionPill, 0, Qt::AlignVCenter);
 
@@ -3192,7 +3299,7 @@ private:
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth);
+        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth, true, kAutostartRowControlHeight);
         layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
         auto showDetails = [this, title, detail]() {
@@ -3486,8 +3593,12 @@ private:
     void scanManual()
     {
         QObject *source = sender();
-        if (source == topScanButton_ || source == scanButton_) {
+        const bool preserveReviewContext = tabs_ && scanStack_
+            && tabs_->currentIndex() == 1
+            && scanStack_->currentIndex() == 2;
+        if (source == scanButton_ || (source == topScanButton_ && !preserveReviewContext)) {
             activeReviewFilter_ = 0;
+            activeReviewPageMode_ = 0;
         }
         scanInternal(true);
     }
@@ -3567,12 +3678,15 @@ private:
     void scanInternal(bool manual)
     {
         const Text text = t();
+        const int restoreFilter = activeReviewFilter_;
+        const int restorePageMode = activeReviewPageMode_;
         setBusy(true);
         if (manual) {
             clearRows(planRows_);
             beginScanProgress();
         }
-        runProcess({helper_, QStringLiteral("--scan"), QStringLiteral("--user"), user_}, [this, manual](int code, const QByteArray &output) {
+        runProcess({helper_, QStringLiteral("--scan"), QStringLiteral("--user"), user_},
+                   [this, manual, restoreFilter, restorePageMode](int code, const QByteArray &output) {
             const Text text = t();
             if (code != 0) {
                 const QString path = writeErrorLog(QStringLiteral("scan helper failed"), output);
@@ -3611,9 +3725,9 @@ private:
             updateMetrics();
             updateApplications();
             updateStatusSummary();
-            auto finish = [this, manual]() {
+            auto finish = [this, manual, restoreFilter, restorePageMode]() {
                 if (manual) {
-                    showScanResults(activeReviewFilter_);
+                    restoreReviewPage(restoreFilter, restorePageMode);
                 }
                 animateRefresh();
                 setBusy(false);
@@ -3624,6 +3738,18 @@ private:
                 finish();
             }
         });
+    }
+
+    void restoreReviewPage(int filter, int pageMode)
+    {
+        activeReviewFilter_ = filter;
+        if (pageMode == 1 && filter == 1) {
+            showContainerSelectionPage();
+        } else if (pageMode == 2 && filter == 2) {
+            showAutostartSelectionPage();
+        } else {
+            showScanResults(filter);
+        }
     }
 
     QString scanSummary() const
@@ -3671,6 +3797,7 @@ private:
         if (filter >= 0) {
             activeReviewFilter_ = filter;
         }
+        activeReviewPageMode_ = 0;
         const Text text = t();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
@@ -3708,9 +3835,6 @@ private:
                     ++inUseContainers;
                 }
             }
-            const QString detail = language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("Open the secondary list to choose old containers for rollback quarantine cleanup.")
-                : QStringLiteral("进入二级列表后选择要移动到回滚隔离区的旧版本容器。");
             const QString statusCardTitle = language_->currentData().toString() == QStringLiteral("en")
                 ? QStringLiteral("Current Status")
                 : QStringLiteral("当前状态");
@@ -3727,13 +3851,10 @@ private:
                                                          QStringLiteral("%1 / %2").arg(selectableContainers).arg(fmtBytes(selectableBytes)),
                                                          QString::number(inUseContainers)}));
             }
-            addOptimizationCard(createNavigationActionRow(text.containerCleanup,
-                                                          detail,
-                                                          language_->currentData().toString() == QStringLiteral("en")
-                                                              ? QStringLiteral("Open list")
-                                                              : QStringLiteral("进入列表"),
-                                                          [this]() { showContainerSelectionPage(); },
-                                                          kNavigationButtonWidth));
+            addOptimizationCard(createLargeNavigationButtonRow(language_->currentData().toString() == QStringLiteral("en")
+                                                                   ? QStringLiteral("Open old container list")
+                                                                   : QStringLiteral("进入旧版本容器列表"),
+                                                               [this]() { showContainerSelectionPage(); }));
         }
 
         if (showAutostarts) {
@@ -3747,29 +3868,27 @@ private:
                 }
             }
             selectableAutostarts = autostarts.size();
-            const QString detail = language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("%1 entries: %2 enabled, %3 disabled. Open the secondary list to disable enabled entries or restore disabled entries.")
-                      .arg(autostarts.size())
-                      .arg(activeEntries)
-                      .arg(disabledEntries)
-                : QStringLiteral("%1 个启动项：%2 个启用，%3 个禁用。进入二级列表后，可禁用已启用项，也可还原已禁用项。")
-                      .arg(autostarts.size())
-                      .arg(activeEntries)
-                      .arg(disabledEntries);
-            addOptimizationCard(createNavigationActionRow(text.autostartOptimization,
-                                                          detail,
-                                                          language_->currentData().toString() == QStringLiteral("en")
-                                                              ? QStringLiteral("Open list")
-                                                              : QStringLiteral("进入列表"),
-                                                          [this]() { showAutostartSelectionPage(); },
-                                                          kNavigationButtonWidth));
+            const QString statusCardTitle = language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Current Status")
+                : QStringLiteral("当前状态");
             if (autostarts.isEmpty()) {
-                addOptimizationCard(createInfoRow(text.autostartOptimization, {text.status}, {text.noAutostarts}));
+                addOptimizationCard(createStatusCardRow(statusCardTitle, {text.status}, {text.noAutostarts}, true));
             } else {
-                for (const QJsonValue &value : autostarts) {
-                    addOptimizationCard(createAutostartStatusRow(value.toObject()));
-                }
+                addOptimizationCard(createStatusCardRow(statusCardTitle,
+                                                        {language_->currentData().toString() == QStringLiteral("en")
+                                                             ? QStringLiteral("Entries")
+                                                             : QStringLiteral("启动项"),
+                                                         text.active,
+                                                         text.disabled},
+                                                        {QString::number(autostarts.size()),
+                                                         QString::number(activeEntries),
+                                                         QString::number(disabledEntries)},
+                                                        true));
             }
+            addOptimizationCard(createLargeNavigationButtonRow(language_->currentData().toString() == QStringLiteral("en")
+                                                                   ? QStringLiteral("Open autostart list")
+                                                                   : QStringLiteral("进入自启动项列表"),
+                                                               [this]() { showAutostartSelectionPage(); }));
         }
 
         if (activeReviewFilter_ == 0 && selectableContainers == 0 && selectableAutostarts == 0) {
@@ -3798,6 +3917,7 @@ private:
     void showContainerSelectionPage()
     {
         const Text text = t();
+        activeReviewPageMode_ = 1;
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
         clearRows(optimizationRows_);
@@ -3814,14 +3934,11 @@ private:
         }
         setSecondarySelectionLayout(true);
 
-        addOptimizationCard(createNavigationActionRow(language_->currentData().toString() == QStringLiteral("en")
-                                                          ? QStringLiteral("Back to optimization overview")
-                                                          : QStringLiteral("返回优化概览"),
-                                                      language_->currentData().toString() == QStringLiteral("en")
-                                                          ? QStringLiteral("Return to the first-level optimization page.")
-                                                          : QStringLiteral("返回上一级优化入口页面。"),
-                                                      text.back,
-                                                      [this]() { showScanResults(activeReviewFilter_); }));
+        addOptimizationCard(createFullWidthButtonRow(language_->currentData().toString() == QStringLiteral("en")
+                                                         ? QStringLiteral("Back to overview")
+                                                         : QStringLiteral("返回优化概览"),
+                                                     [this]() { showScanResults(activeReviewFilter_); },
+                                                     QStyle::SP_ArrowBack));
 
         const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
         if (containers.isEmpty()) {
@@ -3881,6 +3998,7 @@ private:
     void showAutostartSelectionPage()
     {
         const Text text = t();
+        activeReviewPageMode_ = 2;
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
         clearRows(optimizationRows_);
@@ -3897,14 +4015,11 @@ private:
         }
         setSecondarySelectionLayout(true);
 
-        addOptimizationCard(createNavigationActionRow(language_->currentData().toString() == QStringLiteral("en")
-                                                          ? QStringLiteral("Back to optimization overview")
-                                                          : QStringLiteral("返回优化概览"),
-                                                      language_->currentData().toString() == QStringLiteral("en")
-                                                          ? QStringLiteral("Return to the first-level optimization page.")
-                                                          : QStringLiteral("返回上一级优化入口页面。"),
-                                                      text.back,
-                                                      [this]() { showScanResults(activeReviewFilter_); }));
+        addOptimizationCard(createFullWidthButtonRow(language_->currentData().toString() == QStringLiteral("en")
+                                                         ? QStringLiteral("Back to overview")
+                                                         : QStringLiteral("返回优化概览"),
+                                                     [this]() { showScanResults(activeReviewFilter_); },
+                                                     QStyle::SP_ArrowBack));
 
         const QJsonArray autostarts = state_.value(QStringLiteral("autostarts")).toArray();
         if (autostarts.isEmpty()) {
@@ -4924,6 +5039,7 @@ private:
     QPushButton *closeButton_ = nullptr;
     int activeNavIndex_ = 0;
     int activeReviewFilter_ = 0;
+    int activeReviewPageMode_ = 0;
 };
 
 int main(int argc, char **argv)
