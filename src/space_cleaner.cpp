@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QAbstractItemView>
 #include <QBoxLayout>
 #include <QCheckBox>
 #include <QClipboard>
@@ -7,6 +8,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QFrame>
@@ -814,6 +816,128 @@ protected:
     }
 };
 
+class LanguagePopupFrame : public QFrame {
+    Q_OBJECT
+
+public:
+    explicit LanguagePopupFrame(QWidget *parent = nullptr)
+        : QFrame(parent)
+    {
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setAutoFillBackground(false);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        Q_UNUSED(event)
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QRectF panel = rect().adjusted(0.5, 0.5, -0.5, -0.5);
+        painter.setPen(QPen(QColor(255, 255, 255, 58), 1.0));
+        painter.setBrush(QColor(24, 18, 42, 132));
+        painter.drawRoundedRect(panel, 10.0, 10.0);
+    }
+};
+
+class GlassComboBox : public QComboBox {
+    Q_OBJECT
+
+public:
+    explicit GlassComboBox(QWidget *parent = nullptr)
+        : QComboBox(parent)
+    {
+        if (qApp) {
+            qApp->installEventFilter(this);
+        }
+    }
+
+    ~GlassComboBox() override
+    {
+        if (qApp) {
+            qApp->removeEventFilter(this);
+        }
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (!popup_ || !popup_->isVisible()) {
+            return QComboBox::eventFilter(watched, event);
+        }
+        if (event->type() != QEvent::MouseButtonPress) {
+            return QComboBox::eventFilter(watched, event);
+        }
+        auto *widget = qobject_cast<QWidget *>(watched);
+        if (!widget) {
+            return QComboBox::eventFilter(watched, event);
+        }
+        if (widget == this || isAncestorOf(widget) || widget == popup_ || popup_->isAncestorOf(widget)) {
+            return QComboBox::eventFilter(watched, event);
+        }
+        hidePopup();
+        return QComboBox::eventFilter(watched, event);
+    }
+
+    void showPopup() override
+    {
+        if (popup_ && popup_->isVisible()) {
+            popup_->hide();
+            return;
+        }
+        rebuildPopup();
+        if (!popup_) {
+            return;
+        }
+        const QPoint pos = mapTo(window(), QPoint(0, height() + 6));
+        popup_->setFixedWidth(qMax(width(), 128));
+        popup_->move(pos);
+        popup_->show();
+        popup_->raise();
+    }
+
+    void hidePopup() override
+    {
+        if (popup_) {
+            popup_->hide();
+        }
+    }
+
+private:
+    void rebuildPopup()
+    {
+        if (popup_) {
+            popup_->deleteLater();
+            popup_ = nullptr;
+        }
+        QWidget *host = window();
+        if (!host) {
+            return;
+        }
+        auto *frame = new LanguagePopupFrame(host);
+        frame->setObjectName(QStringLiteral("LanguagePopup"));
+        auto *layout = new QVBoxLayout(frame);
+        layout->setContentsMargins(6, 6, 6, 6);
+        layout->setSpacing(2);
+        for (int i = 0; i < count(); ++i) {
+            auto *button = new QPushButton((i == currentIndex() ? QStringLiteral("✓ ") : QStringLiteral("  ")) + itemText(i), frame);
+            button->setObjectName(QStringLiteral("LanguagePopupItem"));
+            button->setProperty("current", i == currentIndex());
+            button->setCursor(Qt::PointingHandCursor);
+            button->setMinimumHeight(34);
+            connect(button, &QPushButton::clicked, this, [this, i]() {
+                setCurrentIndex(i);
+                hidePopup();
+            });
+            layout->addWidget(button);
+        }
+        frame->adjustSize();
+        popup_ = frame;
+    }
+
+    QFrame *popup_ = nullptr;
+};
+
 class CleanerWindow : public QWidget {
     Q_OBJECT
 
@@ -991,7 +1115,7 @@ private:
             QStringLiteral("KARE 写入层"),
             QStringLiteral("其他根分区占用"),
             QStringLiteral("KARE base"),
-            QStringLiteral("WPS/应用"),
+            QStringLiteral("APP占用"),
             QStringLiteral("系统与缓存"),
             QStringLiteral("根分区总占用来自 / 文件系统本身，不包含独立挂载的 /home 和 /data；下面几项是已识别的子项或重点写入层，其他根分区占用包含系统基线、KARE base、普通应用目录、日志和缓存等未单独拆出的内容。"),
             QStringLiteral("整体空间占用"),
@@ -1081,7 +1205,7 @@ private:
             QStringLiteral("KARE Upper"),
             QStringLiteral("Other Root Usage"),
             QStringLiteral("KARE base"),
-            QStringLiteral("WPS/Apps"),
+            QStringLiteral("App Usage"),
             QStringLiteral("System & Cache"),
             QStringLiteral("Root total usage comes from the / filesystem itself and excludes separately mounted /home and /data. The rows below are recognized child categories or key writable layers. Other root usage includes the system baseline, KARE base, ordinary app directories, logs, caches, and anything not broken out separately."),
             QStringLiteral("Overall Space Usage"),
@@ -1348,13 +1472,24 @@ private:
         topScanButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         connect(topScanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
         languageLabel_ = new QLabel;
-        language_ = new QComboBox;
+        language_ = new GlassComboBox;
         language_->addItem(QStringLiteral("中文"), QStringLiteral("zh"));
         language_->addItem(QStringLiteral("English"), QStringLiteral("en"));
         language_->setMinimumWidth(116);
         language_->setMinimumHeight(kButtonHeight);
         language_->setMaximumHeight(kButtonHeight);
         language_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        if (language_->view()) {
+            language_->view()->setFrameShape(QFrame::NoFrame);
+            language_->view()->setAutoFillBackground(false);
+            language_->view()->setAttribute(Qt::WA_TranslucentBackground, true);
+            language_->view()->viewport()->setAutoFillBackground(false);
+            language_->view()->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
+            if (QWidget *popup = language_->view()->window()) {
+                popup->setAutoFillBackground(false);
+                popup->setAttribute(Qt::WA_TranslucentBackground, true);
+            }
+        }
         connect(language_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CleanerWindow::applyLanguage);
         userLabel_ = new QLabel;
         userValue_ = new QLabel(user_);
@@ -2273,12 +2408,51 @@ private:
                 margin-right: 8px;
             }
             QComboBox QAbstractItemView {
-                border: 1px solid #cbd3dd;
-                background: #1b064d;
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: 10px;
+                background: transparent;
                 color: #ffffff;
-                selection-background-color: #b328e0;
+                selection-background-color: transparent;
                 selection-color: #ffffff;
                 outline: 0;
+                padding: 6px;
+            }
+            QComboBoxPrivateContainer {
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: 10px;
+                background: transparent;
+            }
+            QComboBoxPrivateContainer QWidget {
+                background: transparent;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 34px;
+                padding: 0 12px;
+                border-radius: 8px;
+                background: transparent;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: rgba(255, 255, 255, 0.16);
+            }
+            QFrame#LanguagePopup {
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 10px;
+                background: rgba(24, 18, 42, 0.34);
+            }
+            QPushButton#LanguagePopupItem {
+                min-height: 34px;
+                max-height: 34px;
+                padding: 0 12px;
+                border: 0;
+                border-radius: 8px;
+                background: transparent;
+                color: #ffffff;
+                text-align: left;
+                font-weight: 780;
+            }
+            QPushButton#LanguagePopupItem[current="true"],
+            QPushButton#LanguagePopupItem:hover {
+                background: rgba(255, 255, 255, 0.16);
             }
             QPushButton {
                 min-height: 40px;
@@ -3202,6 +3376,10 @@ private:
 
     void scanManual()
     {
+        QObject *source = sender();
+        if (source == topScanButton_ || source == scanButton_) {
+            activeReviewFilter_ = 0;
+        }
         scanInternal(true);
     }
 
@@ -3221,7 +3399,11 @@ private:
         if (scanProgressDetail_) {
             scanProgressDetail_->setText(t().scanProgressDetail);
         }
+        if (tabs_) {
+            tabs_->setCurrentIndex(1);
+        }
         scanStack_->setCurrentIndex(1);
+        updateMainNav(1);
         updateBusyOverlay();
         fadeIn(scanStack_->currentWidget());
         if (!scanProgressTimer_) {
