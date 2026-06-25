@@ -1172,7 +1172,7 @@ private:
             QStringLiteral("版本"),
             QStringLiteral("路径"),
             QStringLiteral("当前引用"),
-            QStringLiteral("使用中"),
+            QStringLiteral("正在使用"),
             QStringLiteral("应用容器统计"),
             QStringLiteral("应用数"),
             QStringLiteral("容器数"),
@@ -2840,6 +2840,11 @@ private:
                 layout->addWidget(pill, 1, Qt::AlignVCenter);
             }
         }
+        if (clickable) {
+            for (QWidget *child : row->findChildren<QWidget *>()) {
+                child->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+            }
+        }
         return row;
     }
 
@@ -3058,10 +3063,13 @@ private:
 
         auto *meta = new QHBoxLayout;
         meta->setSpacing(10);
+        const bool english = language_->currentData().toString() == QStringLiteral("en");
+        const QString yesValue = english ? QStringLiteral("Yes") : QStringLiteral("是");
+        const QString noValue = english ? QStringLiteral("No") : QStringLiteral("否");
         meta->addWidget(createValuePill(text.version, item.value(QStringLiteral("version")).toString()), 1);
         meta->addWidget(createValuePill(text.appSize, fmtBytes(jsonInt64(item, QStringLiteral("bytes")))), 1);
-        meta->addWidget(createValuePill(text.currentLayer, item.value(QStringLiteral("current")).toBool() ? text.active : text.disabled), 1);
-        meta->addWidget(createValuePill(text.inUse, item.value(QStringLiteral("inUse")).toBool() ? text.active : text.disabled), 1);
+        meta->addWidget(createValuePill(text.currentLayer, item.value(QStringLiteral("current")).toBool() ? yesValue : noValue), 1);
+        meta->addWidget(createValuePill(text.inUse, item.value(QStringLiteral("inUse")).toBool() ? yesValue : noValue), 1);
         layout->addLayout(meta);
 
         auto *pathFrame = new QFrame;
