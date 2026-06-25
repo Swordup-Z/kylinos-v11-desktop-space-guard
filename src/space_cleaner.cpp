@@ -43,6 +43,7 @@
 #include <QtCharts/QPieSlice>
 
 #include <cmath>
+#include <functional>
 
 QT_CHARTS_USE_NAMESPACE
 
@@ -2820,6 +2821,33 @@ private:
         return row;
     }
 
+    ClickableCardFrame *createStatusCardRow(const QString &title,
+                                            const QStringList &labels,
+                                            const QStringList &values)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setInteractive(false);
+        row->setCursor(Qt::ArrowCursor);
+        auto *layout = new QVBoxLayout(row);
+        layout->setContentsMargins(14, 10, 14, 10);
+        layout->setSpacing(10);
+
+        auto *titleLabel = makeLabel(title, QStringLiteral("RowTitle"));
+        layout->addWidget(titleLabel);
+
+        auto *pillLayout = new QHBoxLayout;
+        pillLayout->setSpacing(12);
+
+        for (int i = 0; i < values.size(); ++i) {
+            QFrame *pill = createValuePill(labels.value(i), values.at(i));
+            pill->setMinimumWidth(values.size() == 1 ? 360 : 0);
+            pillLayout->addWidget(pill, 1, Qt::AlignVCenter);
+        }
+        layout->addLayout(pillLayout);
+        return row;
+    }
+
     ClickableCardFrame *createAppSummaryRow(const QString &title,
                                             const QStringList &labels,
                                             const QStringList &values)
@@ -2880,7 +2908,7 @@ private:
         return row;
     }
 
-    CardFrame *createSecondaryAutostartToolbar()
+    CardFrame *createSecondaryOptimizationToolbar(const QString &summaryText)
     {
         auto *row = new CardFrame;
         row->setObjectName(QStringLiteral("BottomActionBar"));
@@ -2889,10 +2917,7 @@ private:
         layout->setContentsMargins(18, 14, 18, 14);
         layout->setSpacing(14);
 
-        auto *summary = makeLabel(language_->currentData().toString() == QStringLiteral("en")
-                                      ? QStringLiteral("Select entries, then run the chosen disable or restore changes.")
-                                      : QStringLiteral("选择启动项后，执行对应的禁用或还原变更。"),
-                                  QStringLiteral("PathValue"));
+        auto *summary = makeLabel(summaryText, QStringLiteral("PathValue"));
         summary->setWordWrap(true);
         layout->addWidget(summary, 1);
 
@@ -3443,14 +3468,10 @@ private:
         if (!scanStack_) {
             return;
         }
+        scanProgressCompleting_ = false;
+        scanProgressFinishCallback_ = nullptr;
         scanProgressValue_ = 4;
-        if (progress_) {
-            progress_->setRange(0, 100);
-            progress_->setValue(scanProgressValue_);
-        }
-        if (scanFlowProgress_) {
-            scanFlowProgress_->setValue(scanProgressValue_);
-        }
+        setScanProgressValue(scanProgressValue_);
         if (scanProgressDetail_) {
             scanProgressDetail_->setText(t().scanProgressDetail);
         }
@@ -3464,30 +3485,52 @@ private:
         if (!scanProgressTimer_) {
             scanProgressTimer_ = new QTimer(this);
             connect(scanProgressTimer_, &QTimer::timeout, this, [this]() {
-                scanProgressValue_ = qMin(92, scanProgressValue_ + (scanProgressValue_ < 55 ? 6 : 3));
-                if (scanFlowProgress_) {
-                    scanFlowProgress_->setValue(scanProgressValue_);
-                }
-                if (progress_) {
-                    progress_->setValue(scanProgressValue_);
+                const int target = scanProgressCompleting_ ? 100 : 92;
+                const int step = scanProgressCompleting_
+                    ? (scanProgressValue_ < 78 ? 2 : 1)
+                    : (scanProgressValue_ < 48 ? 2 : 1);
+                setScanProgressValue(qMin(target, scanProgressValue_ + step));
+                if (scanProgressCompleting_ && scanProgressValue_ >= 100) {
+                    scanProgressTimer_->stop();
+                    auto callback = std::move(scanProgressFinishCallback_);
+                    scanProgressFinishCallback_ = nullptr;
+                    scanProgressCompleting_ = false;
+                    if (callback) {
+                        QTimer::singleShot(180, this, std::move(callback));
+                    }
                 }
             });
         }
-        scanProgressTimer_->start(260);
+        scanProgressTimer_->start(70);
     }
 
-    void finishScanProgress()
+    void setScanProgressValue(int value)
     {
-        if (scanProgressTimer_) {
-            scanProgressTimer_->stop();
-        }
-        scanProgressValue_ = 100;
-        if (scanFlowProgress_) {
-            scanFlowProgress_->setValue(100);
-        }
+        scanProgressValue_ = qBound(0, value, 100);
         if (progress_) {
             progress_->setRange(0, 100);
-            progress_->setValue(100);
+            progress_->setValue(scanProgressValue_);
+        }
+        if (scanFlowProgress_) {
+            scanFlowProgress_->setRange(0, 100);
+            scanFlowProgress_->setValue(scanProgressValue_);
+        }
+    }
+
+    void finishScanProgress(std::function<void()> afterFinish = {})
+    {
+        scanProgressFinishCallback_ = std::move(afterFinish);
+        scanProgressCompleting_ = true;
+        if (scanProgressTimer_) {
+            scanProgressTimer_->start(55);
+        } else {
+            setScanProgressValue(100);
+            auto callback = std::move(scanProgressFinishCallback_);
+            scanProgressFinishCallback_ = nullptr;
+            scanProgressCompleting_ = false;
+            if (callback) {
+                QTimer::singleShot(180, this, std::move(callback));
+            }
         }
         updateBusyOverlay();
     }
@@ -3502,37 +3545,55 @@ private:
         }
         runProcess({helper_, QStringLiteral("--scan"), QStringLiteral("--user"), user_}, [this, manual](int code, const QByteArray &output) {
             const Text text = t();
-            if (manual) {
-                finishScanProgress();
-            }
             if (code != 0) {
                 const QString path = writeErrorLog(QStringLiteral("scan helper failed"), output);
-                addPlanRow(text.rawLog, text.failed, language_->currentData().toString() == QStringLiteral("en")
-                    ? QStringLiteral("Scan failed. See the error dialog for the log path.")
-                    : QStringLiteral("扫描失败。错误日志位置见弹窗。"));
-                showErrorDialog(path);
-                setBusy(false);
+                auto finish = [this, text, path]() {
+                    addPlanRow(text.rawLog, text.failed, language_->currentData().toString() == QStringLiteral("en")
+                        ? QStringLiteral("Scan failed. See the error dialog for the log path.")
+                        : QStringLiteral("扫描失败。错误日志位置见弹窗。"));
+                    showErrorDialog(path);
+                    setBusy(false);
+                };
+                if (manual) {
+                    finishScanProgress(finish);
+                } else {
+                    finish();
+                }
                 return;
             }
             const QJsonDocument doc = QJsonDocument::fromJson(output);
             if (!doc.isObject()) {
                 const QString path = writeErrorLog(QStringLiteral("invalid helper JSON"), output);
-                addPlanRow(text.rawLog, text.failed, language_->currentData().toString() == QStringLiteral("en")
-                    ? QStringLiteral("Scan returned invalid data. See the error dialog for the log path.")
-                    : QStringLiteral("扫描返回数据无效。错误日志位置见弹窗。"));
-                showErrorDialog(path);
-                setBusy(false);
+                auto finish = [this, text, path]() {
+                    addPlanRow(text.rawLog, text.failed, language_->currentData().toString() == QStringLiteral("en")
+                        ? QStringLiteral("Scan returned invalid data. See the error dialog for the log path.")
+                        : QStringLiteral("扫描返回数据无效。错误日志位置见弹窗。"));
+                    showErrorDialog(path);
+                    setBusy(false);
+                };
+                if (manual) {
+                    finishScanProgress(finish);
+                } else {
+                    finish();
+                }
                 return;
             }
             state_ = doc.object();
             updateMetrics();
             updateApplications();
             updateStatusSummary();
+            auto finish = [this, manual]() {
+                if (manual) {
+                    showScanResults(activeReviewFilter_);
+                }
+                animateRefresh();
+                setBusy(false);
+            };
             if (manual) {
-                showScanResults(activeReviewFilter_);
+                finishScanProgress(finish);
+            } else {
+                finish();
             }
-            animateRefresh();
-            setBusy(false);
         });
     }
 
@@ -3581,7 +3642,6 @@ private:
         if (filter >= 0) {
             activeReviewFilter_ = filter;
         }
-        autostartSelectionPageOpen_ = false;
         const Text text = t();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
@@ -3604,37 +3664,47 @@ private:
                                   : activeReviewFilter_ == 2 ? text.autostartOptimization
                                                              : text.scanResultTitle);
         }
-        setAutostartSecondaryLayout(false);
+        setSecondarySelectionLayout(false);
 
         if (showContainers) {
-            addOptimizationCard(createInfoRow(text.containerCleanup, {text.status}, {text.selectContainers}));
+            qint64 selectableBytes = 0;
+            int inUseContainers = 0;
             for (const QJsonValue &value : containers) {
                 const QJsonObject item = value.toObject();
-                auto *box = new QCheckBox;
                 const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
-                box->setChecked(selectable);
-                box->setEnabled(selectable);
-                connect(box, &QCheckBox::toggled, this, &CleanerWindow::updateOptimizationSelectionState);
                 if (selectable) {
                     ++selectableContainers;
+                    selectableBytes += jsonInt64(item, QStringLiteral("bytes"));
+                } else {
+                    ++inUseContainers;
                 }
-                const QString title = QStringLiteral("%1 / %2 / %3").arg(item.value(QStringLiteral("ref")).toString(),
-                                                                         item.value(QStringLiteral("module")).toString(),
-                                                                         item.value(QStringLiteral("version")).toString());
-                const QString detail = selectable
-                    ? QStringLiteral("%1\n%2").arg(item.value(QStringLiteral("kind")).toString(),
-                                                   item.value(QStringLiteral("path")).toString())
-                    : QStringLiteral("%1\n%2\n%3").arg(item.value(QStringLiteral("kind")).toString(),
-                                                       item.value(QStringLiteral("path")).toString(),
-                                                       language_->currentData().toString() == QStringLiteral("en")
-                                                           ? QStringLiteral("Mounted or in use; this item cannot be selected safely.")
-                                                           : QStringLiteral("当前已挂载或正在使用，不能安全选择。"));
-                addOptimizationCard(createOptimizationRow(box,
-                                                          title,
-                                                          detail,
-                                                          fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
-                resultContainerBoxes_.append({item.value(QStringLiteral("path")).toString(), box});
             }
+            const QString detail = language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Open the secondary list to choose old containers for rollback quarantine cleanup.")
+                : QStringLiteral("进入二级列表后选择要移动到回滚隔离区的旧版本容器。");
+            const QString statusCardTitle = language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Current Status")
+                : QStringLiteral("当前状态");
+            if (containers.isEmpty()) {
+                addOptimizationCard(createStatusCardRow(statusCardTitle, {text.status}, {text.noContainers}));
+            } else {
+                addOptimizationCard(createStatusCardRow(statusCardTitle,
+                                                        {language_->currentData().toString() == QStringLiteral("en")
+                                                             ? QStringLiteral("Old Containers")
+                                                             : QStringLiteral("旧容器数"),
+                                                         text.cleanable,
+                                                         text.inUse},
+                                                        {QString::number(containers.size()),
+                                                         QStringLiteral("%1 / %2").arg(selectableContainers).arg(fmtBytes(selectableBytes)),
+                                                         QString::number(inUseContainers)}));
+            }
+            addOptimizationCard(createNavigationActionRow(text.containerCleanup,
+                                                          detail,
+                                                          language_->currentData().toString() == QStringLiteral("en")
+                                                              ? QStringLiteral("Open list")
+                                                              : QStringLiteral("进入列表"),
+                                                          [this]() { showContainerSelectionPage(); },
+                                                          kNavigationButtonWidth));
         }
 
         if (showAutostarts) {
@@ -3673,21 +3743,21 @@ private:
             }
         }
 
-        if (selectableContainers == 0 && selectableAutostarts == 0) {
+        if (activeReviewFilter_ == 0 && selectableContainers == 0 && selectableAutostarts == 0) {
             addOptimizationCard(createInfoRow(text.optimizationItems, {text.status}, {text.noCleanable}));
         }
 
         if (resultSummary_) {
             resultSummary_->setText(scanSummary());
         }
-        setOptimizationActionControlsVisible(activeReviewFilter_ != 2);
+        setOptimizationActionControlsVisible(false);
         updateOptimizationSelectionState();
         if (showAutostarts && resultAutostartRows_.isEmpty() && selectionSummary_) {
             selectionSummary_->setText(language_->currentData().toString() == QStringLiteral("en")
                 ? QStringLiteral("Autostart entries are managed in a secondary list. Open the list to choose disable or restore actions.")
                 : QStringLiteral("自启动项在二级列表中管理。进入列表后可选择禁用或还原。"));
         }
-        if (showAutostarts && !showContainers && resultSummaryCard_) {
+        if (((showAutostarts && !showContainers) || (showContainers && !showAutostarts)) && resultSummaryCard_) {
             resultSummaryCard_->hide();
         }
         if (scanStack_) {
@@ -3696,9 +3766,91 @@ private:
         }
     }
 
+    void showContainerSelectionPage()
+    {
+        const Text text = t();
+        resultContainerBoxes_.clear();
+        resultAutostartRows_.clear();
+        clearRows(optimizationRows_);
+        secondarySelectAllButton_ = nullptr;
+        secondaryClearSelectionButton_ = nullptr;
+        secondaryApplyButton_ = nullptr;
+        clearSecondaryToolbar();
+        clearRows(planRows_);
+
+        if (resultTitle_) {
+            resultTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Old Containers")
+                : QStringLiteral("旧版本容器列表"));
+        }
+        setSecondarySelectionLayout(true);
+
+        addOptimizationCard(createNavigationActionRow(language_->currentData().toString() == QStringLiteral("en")
+                                                          ? QStringLiteral("Back to optimization overview")
+                                                          : QStringLiteral("返回优化概览"),
+                                                      language_->currentData().toString() == QStringLiteral("en")
+                                                          ? QStringLiteral("Return to the first-level optimization page.")
+                                                          : QStringLiteral("返回上一级优化入口页面。"),
+                                                      text.back,
+                                                      [this]() { showScanResults(activeReviewFilter_); }));
+
+        const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
+        if (containers.isEmpty()) {
+            addOptimizationCard(createInfoRow(text.containerCleanup, {text.status}, {text.noContainers}));
+        }
+
+        int selectableContainers = 0;
+        for (const QJsonValue &value : containers) {
+            const QJsonObject item = value.toObject();
+            auto *box = new QCheckBox;
+            const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
+            box->setChecked(false);
+            box->setEnabled(selectable);
+            if (selectable) {
+                ++selectableContainers;
+            }
+            connect(box, &QCheckBox::toggled, this, &CleanerWindow::updateOptimizationSelectionState);
+            const QString title = QStringLiteral("%1 / %2 / %3").arg(item.value(QStringLiteral("ref")).toString(),
+                                                                     item.value(QStringLiteral("module")).toString(),
+                                                                     item.value(QStringLiteral("version")).toString());
+            const QString detail = selectable
+                ? QStringLiteral("%1\n%2").arg(item.value(QStringLiteral("kind")).toString(),
+                                               item.value(QStringLiteral("path")).toString())
+                : QStringLiteral("%1\n%2\n%3").arg(item.value(QStringLiteral("kind")).toString(),
+                                                   item.value(QStringLiteral("path")).toString(),
+                                                   language_->currentData().toString() == QStringLiteral("en")
+                                                       ? QStringLiteral("Mounted or in use; this item cannot be selected safely.")
+                                                       : QStringLiteral("当前已挂载或正在使用，不能安全选择。"));
+            addOptimizationCard(createOptimizationRow(box,
+                                                      title,
+                                                      detail,
+                                                      fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
+            resultContainerBoxes_.append({item.value(QStringLiteral("path")).toString(), box});
+        }
+
+        if (secondaryToolbarLayout_ && selectableContainers > 0) {
+            secondaryToolbarLayout_->addWidget(createSecondaryOptimizationToolbar(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Select old containers, then move them to the rollback quarantine.")
+                : QStringLiteral("选择旧版本容器后，执行移动到回滚隔离区的清理操作。")));
+        }
+
+        if (resultSummary_) {
+            resultSummary_->setText(scanSummary());
+        }
+        if (selectionSummary_) {
+            selectionSummary_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Choose old containers to clean from the secondary list.")
+                : QStringLiteral("在二级列表中选择要清理的旧版本容器。"));
+        }
+        updateOptimizationSelectionState();
+        if (scanStack_) {
+            scanStack_->setCurrentIndex(2);
+            fadeIn(scanStack_->currentWidget());
+        }
+    }
+
     void showAutostartSelectionPage()
     {
-        autostartSelectionPageOpen_ = true;
         const Text text = t();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
@@ -3714,7 +3866,7 @@ private:
                 ? QStringLiteral("Autostart Entries")
                 : QStringLiteral("自启动项列表"));
         }
-        setAutostartSecondaryLayout(true);
+        setSecondarySelectionLayout(true);
 
         addOptimizationCard(createNavigationActionRow(language_->currentData().toString() == QStringLiteral("en")
                                                           ? QStringLiteral("Back to optimization overview")
@@ -3764,7 +3916,9 @@ private:
         }
 
         if (secondaryToolbarLayout_) {
-            secondaryToolbarLayout_->addWidget(createSecondaryAutostartToolbar());
+            secondaryToolbarLayout_->addWidget(createSecondaryOptimizationToolbar(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Select entries, then run the chosen disable or restore changes.")
+                : QStringLiteral("选择启动项后，执行对应的禁用或还原变更。")));
         }
 
         if (resultSummary_) {
@@ -3875,7 +4029,7 @@ private:
         }
     }
 
-    void setAutostartSecondaryLayout(bool secondary)
+    void setSecondarySelectionLayout(bool secondary)
     {
         if (resultSummaryCard_) {
             resultSummaryCard_->setVisible(!secondary);
@@ -4667,6 +4821,8 @@ private:
     QProgressBar *scanFlowProgress_ = nullptr;
     QTimer *scanProgressTimer_ = nullptr;
     int scanProgressValue_ = 0;
+    bool scanProgressCompleting_ = false;
+    std::function<void()> scanProgressFinishCallback_;
     QVector<QPair<QString, QCheckBox *>> resultContainerBoxes_;
     QVector<AutostartSelectionRow> resultAutostartRows_;
     QPushButton *heroScanButton_ = nullptr;
@@ -4695,7 +4851,6 @@ private:
     QPushButton *closeButton_ = nullptr;
     int activeNavIndex_ = 0;
     int activeReviewFilter_ = 0;
-    bool autostartSelectionPageOpen_ = false;
 };
 
 int main(int argc, char **argv)
