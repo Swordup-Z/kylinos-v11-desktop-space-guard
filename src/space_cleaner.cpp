@@ -427,7 +427,7 @@ protected:
 
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(28, 31, 36, 10 + static_cast<int>(10 * hover_)));
-        painter.drawRoundedRect(rect.adjusted(1, 3 + hover_, -1, -1), 8, 8);
+        painter.drawRoundedRect(rect.adjusted(1, 3 + hover_, -1, -1), 12, 12);
 
         QColor background = mixedColor(glassPanel, glassPanelHover, hover_);
         QColor border = mixedColor(borderBase, borderHover, hover_);
@@ -439,6 +439,9 @@ protected:
             border = mixedColor(borderBase, borderHover, hover_);
         } else if (objectName() == QStringLiteral("SmartTaskCard")) {
             background = mixedColor(glassRow, glassRowHover, hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("BottomActionBar")) {
+            background = mixedColor(QColor(255, 255, 255, 24), QColor(255, 255, 255, 38), hover_);
             border = mixedColor(borderBase, borderHover, hover_);
         } else if (objectName() == QStringLiteral("OptimizationTaskRow") || objectName() == QStringLiteral("AutostartActionRow")) {
             background = mixedColor(glassRow, glassRowHover, hover_);
@@ -458,7 +461,7 @@ protected:
         }
         painter.setBrush(background);
         painter.setPen(QPen(border, 1));
-        painter.drawRoundedRect(rect.adjusted(0, 0, 0, -2), 8, 8);
+        painter.drawRoundedRect(rect.adjusted(0, 0, 0, -2), 12, 12);
     }
 
 private:
@@ -484,7 +487,7 @@ public:
     explicit AnimatedButton(QWidget *parent = nullptr)
         : QPushButton(parent)
     {
-        setMinimumHeight(36);
+        setMinimumHeight(40);
         setCursor(Qt::PointingHandCursor);
         hoverAnimation_ = new QPropertyAnimation(this, "hover", this);
         hoverAnimation_->setDuration(170);
@@ -539,6 +542,12 @@ protected:
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
+        const qreal tapScale = 1.0 - 0.04 * press_;
+        if (tapScale < 0.999) {
+            painter.translate(width() / 2.0, height() / 2.0);
+            painter.scale(tapScale, tapScale);
+            painter.translate(-width() / 2.0, -height() / 2.0);
+        }
 
         const bool orb = objectName() == QStringLiteral("OrbButton");
         const bool nav = objectName() == QStringLiteral("NavButton");
@@ -596,11 +605,11 @@ protected:
         }
 
         if (!isEnabled()) {
-            base = QColor(238, 242, 246);
+            base = QColor(255, 255, 255, 20);
             hoverColor = base;
             pressColor = base;
-            border = QColor(217, 223, 231);
-            textColor = QColor(164, 169, 177);
+            border = QColor(255, 255, 255, 28);
+            textColor = QColor(255, 255, 255, 104);
         }
 
         if (traffic) {
@@ -659,11 +668,11 @@ protected:
         if (!chrome && !sideNav) {
             painter.setPen(Qt::NoPen);
             painter.setBrush(QColor(28, 31, 36, static_cast<int>(14 * hover_)));
-            painter.drawRoundedRect(rect.adjusted(0, 2, 0, 2), 7, 7);
+            painter.drawRoundedRect(rect.adjusted(0, 2, 0, 2), 10, 10);
         }
         painter.setPen(QPen(border, 1));
         painter.setBrush(fill);
-        const qreal radius = sideNav ? 12.0 : 7.0;
+        const qreal radius = sideNav ? 12.0 : 10.0;
         painter.drawRoundedRect(rect, radius, radius);
         if (chrome) {
             const QString windowAction = property("windowAction").toString();
@@ -1133,6 +1142,37 @@ private:
 
     Text t() const { return language_->currentData().toString() == QStringLiteral("en") ? en() : zh(); }
 
+    static constexpr int kButtonHeight = 40;
+    static constexpr int kCompactButtonWidth = 88;
+    static constexpr int kSecondaryButtonWidth = 108;
+    static constexpr int kBackButtonWidth = 118;
+    static constexpr int kActionButtonWidth = 136;
+    static constexpr int kPrimaryButtonWidth = 156;
+    static constexpr int kNavigationButtonWidth = 272;
+    static constexpr int kToolbarButtonHeight = 50;
+    static constexpr int kToolbarSecondaryButtonWidth = 132;
+    static constexpr int kToolbarPrimaryButtonWidth = 178;
+
+    static void applyButtonMetrics(QPushButton *button,
+                                   int width = 0,
+                                   bool fixedWidth = true,
+                                   int height = kButtonHeight)
+    {
+        if (!button) {
+            return;
+        }
+        button->setMinimumHeight(height);
+        button->setMaximumHeight(height);
+        button->setCursor(Qt::PointingHandCursor);
+        if (width > 0) {
+            button->setMinimumWidth(width);
+            if (fixedWidth) {
+                button->setMaximumWidth(width);
+            }
+        }
+        button->setSizePolicy(fixedWidth ? QSizePolicy::Fixed : QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+
     bool eventFilter(QObject *watched, QEvent *event) override
     {
         if (watched != chrome_) {
@@ -1302,7 +1342,9 @@ private:
         topScanButton_->setObjectName(QStringLiteral("HeaderScanButton"));
         topScanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
         topScanButton_->setIconSize(QSize(20, 20));
-        topScanButton_->setMinimumSize(138, 44);
+        applyButtonMetrics(topScanButton_, 150);
+        topScanButton_->setMinimumHeight(42);
+        topScanButton_->setMaximumHeight(42);
         topScanButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         connect(topScanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
         languageLabel_ = new QLabel;
@@ -1310,6 +1352,8 @@ private:
         language_->addItem(QStringLiteral("中文"), QStringLiteral("zh"));
         language_->addItem(QStringLiteral("English"), QStringLiteral("en"));
         language_->setMinimumWidth(116);
+        language_->setMinimumHeight(kButtonHeight);
+        language_->setMaximumHeight(kButtonHeight);
         language_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         connect(language_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &CleanerWindow::applyLanguage);
         userLabel_ = new QLabel;
@@ -1420,6 +1464,8 @@ private:
         appsPageButton_->setObjectName(QStringLiteral("ActionButton"));
         metricsPageButton_->setIcon(style()->standardIcon(QStyle::SP_DriveHDIcon));
         appsPageButton_->setIcon(style()->standardIcon(QStyle::SP_FileDialogListView));
+        applyButtonMetrics(metricsPageButton_, kPrimaryButtonWidth);
+        applyButtonMetrics(appsPageButton_, kActionButtonWidth);
         statusSwitcher->addWidget(metricsPageButton_);
         statusSwitcher->addWidget(appsPageButton_);
         statusSwitcher->addStretch(1);
@@ -1515,7 +1561,6 @@ private:
         metricsLayout->setSpacing(10);
         metricsTitle_ = new QLabel(metricsCard);
         metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
-        metricsTitle_->hide();
         metricsRelation_ = new QLabel(metricsCard);
         metricsRelation_->setObjectName(QStringLiteral("Intro"));
         metricsRelation_->setWordWrap(true);
@@ -1548,7 +1593,8 @@ private:
         metricsLayout->addSpacing(18);
         rootDetailsButton_ = new AnimatedButton;
         rootDetailsButton_->setObjectName(QStringLiteral("ActionButton"));
-        rootDetailsButton_->setMinimumHeight(58);
+        rootDetailsButton_->setMinimumHeight(52);
+        rootDetailsButton_->setMaximumHeight(52);
         rootDetailsButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         rootDetailsButton_->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
         rootDetailsButton_->setIconSize(QSize(18, 18));
@@ -1568,7 +1614,7 @@ private:
         rootDetailsHeader->setSpacing(10);
         rootDetailsBackButton_ = new AnimatedButton;
         rootDetailsBackButton_->setObjectName(QStringLiteral("ActionButton"));
-        rootDetailsBackButton_->setMinimumHeight(36);
+        applyButtonMetrics(rootDetailsBackButton_, kBackButtonWidth);
         rootDetailsBackButton_->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
         rootDetailsBackButton_->setIconSize(QSize(18, 18));
         rootDetailsHeader->addWidget(rootDetailsBackButton_, 0, Qt::AlignLeft);
@@ -1631,6 +1677,7 @@ private:
         detailHeader->setSpacing(10);
         backToAppsButton_ = new AnimatedButton;
         backToAppsButton_->setObjectName(QStringLiteral("ActionButton"));
+        applyButtonMetrics(backToAppsButton_, kBackButtonWidth);
         backToAppsButton_->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
         detailTitle_ = new QLabel;
         detailTitle_->setObjectName(QStringLiteral("SectionTitle"));
@@ -1803,8 +1850,8 @@ private:
         clearSelectionButton_ = new QPushButton;
         selectAllButton_->setObjectName(QStringLiteral("TaskDetailButton"));
         clearSelectionButton_->setObjectName(QStringLiteral("TaskDetailButton"));
-        selectAllButton_->setCursor(Qt::PointingHandCursor);
-        clearSelectionButton_->setCursor(Qt::PointingHandCursor);
+        applyButtonMetrics(selectAllButton_, kSecondaryButtonWidth);
+        applyButtonMetrics(clearSelectionButton_, kSecondaryButtonWidth);
         selectionButtons->addWidget(selectAllButton_);
         selectionButtons->addWidget(clearSelectionButton_);
         summaryLayout->addLayout(selectionButtons);
@@ -1818,8 +1865,8 @@ private:
         rescanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
         applyOptimizationsButton_->setIconSize(QSize(18, 18));
         rescanButton_->setIconSize(QSize(18, 18));
-        applyOptimizationsButton_->setMinimumHeight(36);
-        rescanButton_->setMinimumHeight(36);
+        applyButtonMetrics(applyOptimizationsButton_, kPrimaryButtonWidth, false);
+        applyButtonMetrics(rescanButton_, kActionButtonWidth, false);
         resultActions->addWidget(applyOptimizationsButton_);
         resultActions->addWidget(rescanButton_);
         summaryLayout->addLayout(resultActions);
@@ -1832,6 +1879,14 @@ private:
         optimizationList_ = optimizationScroll->widget();
         resultContent->addWidget(optimizationScroll, 1);
         resultLayout->addLayout(resultContent, 1);
+        secondaryToolbarHost_ = new QWidget;
+        secondaryToolbarHost_->setObjectName(QStringLiteral("SecondaryToolbarHost"));
+        auto *secondaryToolbarLayout = new QVBoxLayout(secondaryToolbarHost_);
+        secondaryToolbarLayout->setContentsMargins(0, 2, 0, 0);
+        secondaryToolbarLayout->setSpacing(0);
+        secondaryToolbarLayout_ = secondaryToolbarLayout;
+        secondaryToolbarHost_->hide();
+        resultLayout->addWidget(secondaryToolbarHost_);
         scanResultLayout->addWidget(resultCard, 1);
         connect(applyOptimizationsButton_, &QPushButton::clicked, this, &CleanerWindow::applySelectedOptimizations);
         connect(rescanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
@@ -1858,11 +1913,10 @@ private:
         actionResultHeaderLayout->addWidget(actionResultHint, 1);
         auto *backFromActionResultButton = new QPushButton;
         backFromActionResultButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        backFromActionResultButton->setCursor(Qt::PointingHandCursor);
         backFromActionResultButton->setText(language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("Back")
             : QStringLiteral("返回"));
-        backFromActionResultButton->setFixedWidth(118);
+        applyButtonMetrics(backFromActionResultButton, kBackButtonWidth);
         actionResultHeaderLayout->addWidget(backFromActionResultButton);
         actionResultLayout->addWidget(actionResultHeader);
         connect(backFromActionResultButton, &QPushButton::clicked, this, [this]() {
@@ -2015,7 +2069,8 @@ private:
             }
             QFrame#SmartTaskCard QLabel#PathValue,
             QFrame#InfoRow QLabel#PathValue,
-            QFrame#SmartSummaryCard QLabel#PathValue {
+            QFrame#SmartSummaryCard QLabel#PathValue,
+            QFrame#BottomActionBar QLabel#PathValue {
                 color: #d8c9ea;
             }
             QFrame#SmartSummaryCard QLabel#Intro,
@@ -2031,8 +2086,9 @@ private:
             }
             QFrame#ValuePill {
                 border: 1px solid rgba(255, 255, 255, 0.16);
-                border-radius: 8px;
+                border-radius: 9px;
                 background: rgba(255, 255, 255, 0.10);
+                min-height: 42px;
             }
             QLabel#PillLabel {
                 color: #cfc0ea;
@@ -2046,7 +2102,7 @@ private:
             }
             QFrame#PathPill {
                 border: 1px solid rgba(255, 255, 255, 0.16);
-                border-radius: 8px;
+                border-radius: 9px;
                 background: rgba(255, 255, 255, 0.08);
             }
             QLabel#PathValue {
@@ -2122,6 +2178,7 @@ private:
                 color: #ffffff;
                 font-weight: 750;
                 spacing: 10px;
+                min-height: 40px;
             }
             QFrame#OptimizationTaskRow QCheckBox,
             QFrame#SmartSummaryCard QCheckBox {
@@ -2147,17 +2204,26 @@ private:
                 font-weight: 800;
             }
             QPushButton#TaskDetailButton {
-                min-height: 30px;
-                padding: 0 12px;
-                border-radius: 7px;
+                min-height: 40px;
+                max-height: 40px;
+                padding: 0 14px;
+                border-radius: 10px;
                 border: 1px solid rgba(255, 255, 255, 0.26);
                 background: rgba(255, 255, 255, 0.16);
                 color: #ffffff;
-                font-weight: 700;
+                font-weight: 760;
             }
             QPushButton#TaskDetailButton:hover {
                 background: rgba(255, 255, 255, 0.24);
                 border-color: rgba(255, 255, 255, 0.46);
+            }
+            QPushButton[toolbarButton="true"] {
+                min-height: 50px;
+                max-height: 50px;
+                padding: 0 22px;
+                border-radius: 12px;
+                font-size: 15px;
+                font-weight: 820;
             }
             QMenu {
                 border: 1px solid #cbd3dd;
@@ -2179,9 +2245,10 @@ private:
                 color: #a4a9b1;
             }
             QComboBox {
-                min-height: 34px;
+                min-height: 40px;
+                max-height: 40px;
                 padding: 0 30px 0 12px;
-                border-radius: 7px;
+                border-radius: 10px;
                 border: 1px solid rgba(255, 255, 255, 0.20);
                 background: rgba(255, 255, 255, 0.12);
                 color: #ffffff;
@@ -2214,9 +2281,10 @@ private:
                 outline: 0;
             }
             QPushButton {
-                min-height: 34px;
+                min-height: 40px;
+                max-height: 40px;
                 padding: 0 16px;
-                border-radius: 7px;
+                border-radius: 10px;
                 border: 1px solid rgba(255, 255, 255, 0.18);
                 background: rgba(255, 255, 255, 0.12);
                 color: #ffffff;
@@ -2227,15 +2295,19 @@ private:
             QPushButton#PrimaryButton {
                 color: #ffffff;
                 border: 1px solid rgba(255, 255, 255, 0.24);
-                background: #c82af2;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #ff67dc, stop:0.48 #c82af2, stop:1 #7f44ff);
             }
             QPushButton#ActionButton {
                 color: #f8f4ff;
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(255, 255, 255, 0.24);
+                background: rgba(255, 255, 255, 0.14);
             }
             QPushButton#PrimaryButton:hover,
-            QPushButton#NavSelected:hover { background: #df35ff; }
+            QPushButton#NavSelected:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #ff83e7, stop:0.48 #df35ff, stop:1 #8e5cff);
+            }
             QPushButton#OrbButton {
                 min-width: 118px;
                 min-height: 118px;
@@ -2268,9 +2340,9 @@ private:
                 background: #c82af2;
             }
             QPushButton:disabled {
-                color: #a4a9b1;
-                background: #eef2f6;
-                border-color: #d9dfe7;
+                color: rgba(255, 255, 255, 0.42);
+                background: rgba(255, 255, 255, 0.08);
+                border-color: rgba(255, 255, 255, 0.10);
             }
         )"));
     }
@@ -2509,9 +2581,9 @@ private:
         const QString percent = rootValue > 0
             ? QString::number(value * 100.0 / rootValue, 'f', total ? 0 : 1) + QLatin1Char('%')
             : QStringLiteral("-");
-        layout->addWidget(createValuePill(text.before, usage), 1);
-        layout->addWidget(createValuePill(text.released, cleanable), 1);
-        layout->addWidget(createValuePill(total ? text.metricStatus : text.shareOfRoot, total ? status : percent), 1);
+        layout->addWidget(createValuePill(text.before, usage), 1, Qt::AlignVCenter);
+        layout->addWidget(createValuePill(text.released, cleanable), 1, Qt::AlignVCenter);
+        layout->addWidget(createValuePill(total ? text.metricStatus : text.shareOfRoot, total ? status : percent), 1, Qt::AlignVCenter);
         return row;
     }
 
@@ -2538,9 +2610,9 @@ private:
             QFrame *pill = createValuePill(labels.value(i), values.at(i));
             if (values.size() == 1) {
                 pill->setMinimumWidth(300);
-                layout->addWidget(pill, 2);
+                layout->addWidget(pill, 2, Qt::AlignVCenter);
             } else {
-                layout->addWidget(pill, 1);
+                layout->addWidget(pill, 1, Qt::AlignVCenter);
             }
         }
         return row;
@@ -2549,7 +2621,8 @@ private:
     ClickableCardFrame *createNavigationActionRow(const QString &title,
                                                   const QString &detail,
                                                   const QString &buttonText,
-                                                  const std::function<void()> &action)
+                                                  const std::function<void()> &action,
+                                                  int buttonWidth = kActionButtonWidth)
     {
         auto *row = new ClickableCardFrame;
         row->setObjectName(QStringLiteral("InfoRow"));
@@ -2568,8 +2641,7 @@ private:
 
         auto *button = new QPushButton(buttonText);
         button->setObjectName(QStringLiteral("TaskDetailButton"));
-        button->setCursor(Qt::PointingHandCursor);
-        button->setMinimumWidth(118);
+        applyButtonMetrics(button, buttonWidth);
         layout->addWidget(button, 0, Qt::AlignVCenter);
 
         connect(row, &ClickableCardFrame::clicked, this, action);
@@ -2580,11 +2652,11 @@ private:
     CardFrame *createSecondaryAutostartToolbar()
     {
         auto *row = new CardFrame;
-        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setObjectName(QStringLiteral("BottomActionBar"));
         row->setInteractive(false);
         auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(16, 12, 16, 12);
-        layout->setSpacing(12);
+        layout->setContentsMargins(18, 14, 18, 14);
+        layout->setSpacing(14);
 
         auto *summary = makeLabel(language_->currentData().toString() == QStringLiteral("en")
                                       ? QStringLiteral("Select entries, then run the chosen disable or restore changes.")
@@ -2608,12 +2680,21 @@ private:
             : QStringLiteral("运行"));
         secondarySelectAllButton_->setObjectName(QStringLiteral("TaskDetailButton"));
         secondaryClearSelectionButton_->setObjectName(QStringLiteral("TaskDetailButton"));
-        secondarySelectAllButton_->setCursor(Qt::PointingHandCursor);
-        secondaryClearSelectionButton_->setCursor(Qt::PointingHandCursor);
-        secondaryApplyButton_->setCursor(Qt::PointingHandCursor);
-        secondarySelectAllButton_->setFixedWidth(92);
-        secondaryClearSelectionButton_->setFixedWidth(92);
-        secondaryApplyButton_->setFixedWidth(118);
+        secondarySelectAllButton_->setProperty("toolbarButton", true);
+        secondaryClearSelectionButton_->setProperty("toolbarButton", true);
+        secondaryApplyButton_->setProperty("toolbarButton", true);
+        applyButtonMetrics(secondarySelectAllButton_,
+                           kToolbarSecondaryButtonWidth,
+                           true,
+                           kToolbarButtonHeight);
+        applyButtonMetrics(secondaryClearSelectionButton_,
+                           kToolbarSecondaryButtonWidth,
+                           true,
+                           kToolbarButtonHeight);
+        applyButtonMetrics(secondaryApplyButton_,
+                           kToolbarPrimaryButtonWidth,
+                           true,
+                           kToolbarButtonHeight);
 
         layout->addWidget(secondarySelectAllButton_, 0);
         layout->addWidget(secondaryClearSelectionButton_, 0);
@@ -2643,16 +2724,15 @@ private:
 
         QFrame *statusPill = createValuePill(text.status, enabled ? text.active : text.disabled);
         statusPill->setFixedWidth(92);
-        layout->addWidget(statusPill, 0);
+        layout->addWidget(statusPill, 0, Qt::AlignVCenter);
 
         const QString detailText = language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("Details")
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        detailButton->setCursor(Qt::PointingHandCursor);
-        detailButton->setFixedWidth(78);
-        layout->addWidget(detailButton, 0);
+        applyButtonMetrics(detailButton, kCompactButtonWidth);
+        layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
         const QString detail = (language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("Current: %1\n%2\n%3")
@@ -2750,8 +2830,7 @@ private:
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        detailButton->setCursor(Qt::PointingHandCursor);
-        detailButton->setMinimumWidth(82);
+        applyButtonMetrics(detailButton, kCompactButtonWidth);
         side->addWidget(detailButton);
         side->addStretch(1);
         layout->addLayout(side, 1);
@@ -2819,17 +2898,16 @@ private:
                                              actionLabel);
         statusPill->setFixedWidth(88);
         actionPill->setFixedWidth(88);
-        layout->addWidget(statusPill, 0);
-        layout->addWidget(actionPill, 0);
+        layout->addWidget(statusPill, 0, Qt::AlignVCenter);
+        layout->addWidget(actionPill, 0, Qt::AlignVCenter);
 
         const QString detailText = language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("Details")
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        detailButton->setCursor(Qt::PointingHandCursor);
-        detailButton->setFixedWidth(78);
-        layout->addWidget(detailButton, 0);
+        applyButtonMetrics(detailButton, kCompactButtonWidth);
+        layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
         auto showDetails = [this, title, detail]() {
             QMessageBox box(QMessageBox::Information, title, detail, QMessageBox::NoButton, this);
@@ -3248,6 +3326,19 @@ private:
         optimizationRows_->addStretch(1);
     }
 
+    void clearSecondaryToolbar()
+    {
+        if (!secondaryToolbarLayout_) {
+            return;
+        }
+        while (QLayoutItem *item = secondaryToolbarLayout_->takeAt(0)) {
+            if (QWidget *widget = item->widget()) {
+                widget->deleteLater();
+            }
+            delete item;
+        }
+    }
+
     void showScanResults(int filter = -1)
     {
         if (filter >= 0) {
@@ -3261,6 +3352,7 @@ private:
         secondarySelectAllButton_ = nullptr;
         secondaryClearSelectionButton_ = nullptr;
         secondaryApplyButton_ = nullptr;
+        clearSecondaryToolbar();
         clearRows(planRows_);
 
         const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
@@ -3333,7 +3425,8 @@ private:
                                                           language_->currentData().toString() == QStringLiteral("en")
                                                               ? QStringLiteral("Open list")
                                                               : QStringLiteral("进入列表"),
-                                                          [this]() { showAutostartSelectionPage(); }));
+                                                          [this]() { showAutostartSelectionPage(); },
+                                                          kNavigationButtonWidth));
             if (autostarts.isEmpty()) {
                 addOptimizationCard(createInfoRow(text.autostartOptimization, {text.status}, {text.noAutostarts}));
             } else {
@@ -3376,6 +3469,7 @@ private:
         secondarySelectAllButton_ = nullptr;
         secondaryClearSelectionButton_ = nullptr;
         secondaryApplyButton_ = nullptr;
+        clearSecondaryToolbar();
         clearRows(planRows_);
 
         if (resultTitle_) {
@@ -3393,7 +3487,6 @@ private:
                                                           : QStringLiteral("返回上一级优化入口页面。"),
                                                       text.back,
                                                       [this]() { showScanResults(activeReviewFilter_); }));
-        addOptimizationCard(createSecondaryAutostartToolbar());
 
         const QJsonArray autostarts = state_.value(QStringLiteral("autostarts")).toArray();
         if (autostarts.isEmpty()) {
@@ -3431,6 +3524,10 @@ private:
                                                          actionLabel,
                                                          detail));
             resultAutostartRows_.append({item.value(QStringLiteral("id")).toString(), currentlyEnabled, box});
+        }
+
+        if (secondaryToolbarLayout_) {
+            secondaryToolbarLayout_->addWidget(createSecondaryAutostartToolbar());
         }
 
         if (resultSummary_) {
@@ -3547,7 +3644,10 @@ private:
             resultSummaryCard_->setVisible(!secondary);
         }
         if (optimizationScrollArea_) {
-            optimizationScrollArea_->setMinimumHeight(secondary ? 560 : 430);
+            optimizationScrollArea_->setMinimumHeight(secondary ? 470 : 430);
+        }
+        if (secondaryToolbarHost_) {
+            secondaryToolbarHost_->setVisible(secondary);
         }
     }
 
@@ -4305,6 +4405,7 @@ private:
     QLabel *resultSummary_ = nullptr;
     QLabel *selectionSummary_ = nullptr;
     QWidget *resultSummaryCard_ = nullptr;
+    QWidget *secondaryToolbarHost_ = nullptr;
     QWidget *planCard_ = nullptr;
     QLabel *planTitle_ = nullptr;
     QLabel *scanProgressTitle_ = nullptr;
@@ -4325,6 +4426,7 @@ private:
     QVBoxLayout *detailRows_ = nullptr;
     QVBoxLayout *planRows_ = nullptr;
     QVBoxLayout *optimizationRows_ = nullptr;
+    QVBoxLayout *secondaryToolbarLayout_ = nullptr;
     QProgressBar *scanFlowProgress_ = nullptr;
     QTimer *scanProgressTimer_ = nullptr;
     int scanProgressValue_ = 0;
