@@ -1269,10 +1269,12 @@ private:
     static constexpr int kButtonHeight = 40;
     static constexpr int kCompactButtonWidth = 88;
     static constexpr int kSecondaryButtonWidth = 108;
-    static constexpr int kBackButtonWidth = 118;
+    static constexpr int kBackButtonWidth = 236;
     static constexpr int kActionButtonWidth = 136;
     static constexpr int kPrimaryButtonWidth = 156;
     static constexpr int kNavigationButtonWidth = 272;
+    static constexpr int kAutostartPillWidth = 128;
+    static constexpr int kAutostartDetailButtonWidth = kCompactButtonWidth * 2;
     static constexpr int kToolbarButtonHeight = 50;
     static constexpr int kToolbarSecondaryButtonWidth = 132;
     static constexpr int kToolbarPrimaryButtonWidth = 178;
@@ -1794,14 +1796,19 @@ private:
         appsRelation_->setObjectName(QStringLiteral("Intro"));
         appsRelation_->setWordWrap(true);
         appsLayout->addWidget(appsRelation_);
-        auto *appsSummaryScroll = createCardList(&appsSummaryRows_, 88);
-        appsSummaryScroll->setMaximumHeight(104);
-        appsLayout->addWidget(appsSummaryScroll);
-        auto *appsScroll = createCardList(&appsRows_, 380);
+        auto *appsSummaryContent = new QWidget;
+        appsSummaryContent->setObjectName(QStringLiteral("CardList"));
+        auto *appsSummaryLayout = new QVBoxLayout(appsSummaryContent);
+        appsSummaryLayout->setContentsMargins(2, 2, 2, 2);
+        appsSummaryLayout->setSpacing(0);
+        appsSummaryContent->setMinimumHeight(68);
+        appsSummaryContent->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        appsSummaryRows_ = appsSummaryLayout;
+        appsLayout->addWidget(appsSummaryContent, 0);
+        auto *appsScroll = createCardList(&appsRows_, 300);
         appsList_ = appsScroll->widget();
-        appsLayout->addWidget(appsScroll);
-        appsOverviewLayout->addWidget(appsCard);
-        appsOverviewLayout->addStretch(1);
+        appsLayout->addWidget(appsScroll, 1);
+        appsOverviewLayout->addWidget(appsCard, 1);
 
         auto *detailPage = new QWidget;
         detailPage->setObjectName(QStringLiteral("TabPage"));
@@ -1825,9 +1832,9 @@ private:
         auto *detailCardLayout = new QVBoxLayout(detailCard);
         detailCardLayout->setContentsMargins(16, 14, 16, 16);
         detailCardLayout->setSpacing(10);
-        auto *detailScroll = createCardList(&detailRows_, 420);
+        auto *detailScroll = createCardList(&detailRows_, 360);
         detailList_ = detailScroll->widget();
-        detailCardLayout->addWidget(detailScroll);
+        detailCardLayout->addWidget(detailScroll, 1);
         detailLayout->addWidget(detailCard, 1);
         connect(backToAppsButton_, &QPushButton::clicked, this, [this]() {
             if (appsStack_) {
@@ -2189,6 +2196,7 @@ private:
                 font-weight: 800;
             }
             QFrame#InfoRow QLabel#RowTitle,
+            QFrame#AppSummaryRow QLabel#RowTitle,
             QFrame#SmartTaskCard QLabel#RowTitle,
             QFrame#SmartSummaryCard QLabel#RowTitle,
             QFrame#OptimizationTaskRow QLabel#RowTitle,
@@ -2224,6 +2232,26 @@ private:
                 border-radius: 9px;
                 background: rgba(255, 255, 255, 0.10);
                 min-height: 42px;
+            }
+            QFrame#AppSummaryRow {
+                border: 1px solid rgba(66, 235, 213, 0.36);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.09);
+            }
+            QFrame#AppSummaryPill {
+                border: 1px solid rgba(255, 255, 255, 0.30);
+                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.20);
+                min-height: 56px;
+            }
+            QFrame#AppSummaryPill QLabel#PillLabel {
+                background: transparent;
+                color: #e9dcff;
+                font-weight: 800;
+            }
+            QFrame#AppSummaryPill QLabel#PillValue {
+                font-size: 17px;
+                font-weight: 900;
             }
             QLabel#PillLabel {
                 color: #cfc0ea;
@@ -2665,7 +2693,7 @@ private:
         auto *content = new QWidget;
         content->setObjectName(QStringLiteral("CardList"));
         auto *layout = new QVBoxLayout(content);
-        layout->setContentsMargins(2, 2, 2, 2);
+        layout->setContentsMargins(2, 2, 2, 28);
         layout->setSpacing(10);
         scroll->setWidget(content);
         *rows = layout;
@@ -2792,6 +2820,35 @@ private:
         return row;
     }
 
+    ClickableCardFrame *createAppSummaryRow(const QString &title,
+                                            const QStringList &labels,
+                                            const QStringList &values)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("AppSummaryRow"));
+        row->setInteractive(false);
+        row->setCursor(Qt::ArrowCursor);
+        row->setMinimumHeight(82);
+
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(16, 10, 16, 10);
+        layout->setSpacing(14);
+
+        auto *titleLabel = makeLabel(title, QStringLiteral("RowTitle"));
+        titleLabel->setMinimumWidth(156);
+        titleLabel->setMaximumWidth(180);
+        layout->addWidget(titleLabel, 0);
+
+        for (int i = 0; i < values.size(); ++i) {
+            QFrame *pill = createValuePill(labels.value(i), values.at(i));
+            pill->setObjectName(QStringLiteral("AppSummaryPill"));
+            pill->setMinimumWidth(0);
+            pill->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+            layout->addWidget(pill, 1, Qt::AlignVCenter);
+        }
+        return row;
+    }
+
     ClickableCardFrame *createNavigationActionRow(const QString &title,
                                                   const QString &detail,
                                                   const QString &buttonText,
@@ -2897,7 +2954,7 @@ private:
         layout->addWidget(title, 1);
 
         QFrame *statusPill = createValuePill(text.status, enabled ? text.active : text.disabled);
-        statusPill->setFixedWidth(92);
+        statusPill->setFixedWidth(kAutostartPillWidth);
         layout->addWidget(statusPill, 0, Qt::AlignVCenter);
 
         const QString detailText = language_->currentData().toString() == QStringLiteral("en")
@@ -2905,7 +2962,7 @@ private:
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        applyButtonMetrics(detailButton, kCompactButtonWidth);
+        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth);
         layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
         const QString detail = (language_->currentData().toString() == QStringLiteral("en")
@@ -3070,8 +3127,8 @@ private:
                                                  ? QStringLiteral("Action")
                                                  : QStringLiteral("动作"),
                                              actionLabel);
-        statusPill->setFixedWidth(88);
-        actionPill->setFixedWidth(88);
+        statusPill->setFixedWidth(kAutostartPillWidth);
+        actionPill->setFixedWidth(kAutostartPillWidth);
         layout->addWidget(statusPill, 0, Qt::AlignVCenter);
         layout->addWidget(actionPill, 0, Qt::AlignVCenter);
 
@@ -3080,7 +3137,7 @@ private:
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        applyButtonMetrics(detailButton, kCompactButtonWidth);
+        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth);
         layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
         auto showDetails = [this, title, detail]() {
@@ -3262,10 +3319,9 @@ private:
         if (appsSummaryRows_->count() > 0 && appsSummaryRows_->itemAt(appsSummaryRows_->count() - 1)->spacerItem()) {
             delete appsSummaryRows_->takeAt(appsSummaryRows_->count() - 1);
         }
-        appsSummaryRows_->addWidget(createInfoRow(text.appSummaryTitle,
-                                                  {text.appTotal, text.totalContainers, text.appContainersUsage},
-                                                  {text.pendingScan, text.pendingScan, text.pendingScan}));
-        appsSummaryRows_->addStretch(1);
+        appsSummaryRows_->addWidget(createAppSummaryRow(text.appSummaryTitle,
+                                                        {text.appTotal, text.totalContainers, text.appContainersUsage},
+                                                        {text.pendingScan, text.pendingScan, text.pendingScan}));
     }
 
     void updateApplicationSummary(const QJsonArray &applications)
@@ -3285,12 +3341,11 @@ private:
         if (appsSummaryRows_->count() > 0 && appsSummaryRows_->itemAt(appsSummaryRows_->count() - 1)->spacerItem()) {
             delete appsSummaryRows_->takeAt(appsSummaryRows_->count() - 1);
         }
-        appsSummaryRows_->addWidget(createInfoRow(text.appSummaryTitle,
-                                                  {text.appTotal, text.totalContainers, text.appContainersUsage},
-                                                  {QString::number(applications.size()),
-                                                   QString::number(containerCount),
-                                                   fmtBytes(totalBytes)}));
-        appsSummaryRows_->addStretch(1);
+        appsSummaryRows_->addWidget(createAppSummaryRow(text.appSummaryTitle,
+                                                        {text.appTotal, text.totalContainers, text.appContainersUsage},
+                                                        {QString::number(applications.size()),
+                                                         QString::number(containerCount),
+                                                         fmtBytes(totalBytes)}));
     }
 
     static qint64 jsonInt64(const QJsonObject &object, const QString &key)
