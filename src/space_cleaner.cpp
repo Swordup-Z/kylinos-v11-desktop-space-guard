@@ -971,6 +971,12 @@ public:
     }
 
 protected:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QWidget::resizeEvent(event);
+        updateBusyOverlay();
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
@@ -1660,17 +1666,17 @@ private:
         tabs_->setCurrentIndex(0);
         auto *contentLayer = new QFrame;
         contentLayer->setObjectName(QStringLiteral("ContentLayer"));
+        contentLayer_ = contentLayer;
         auto *contentLayerLayout = new QGridLayout(contentLayer);
         contentLayerLayout->setContentsMargins(0, 0, 0, 0);
         contentLayerLayout->setSpacing(0);
         contentLayerLayout->addWidget(tabs_, 0, 0);
-        busyOverlay_ = new QFrame;
+        busyOverlay_ = new QFrame(contentLayer);
         busyOverlay_->setObjectName(QStringLiteral("BusyOverlay"));
         busyOverlay_->hide();
         auto *busyOverlayLayout = new QVBoxLayout(busyOverlay_);
         busyOverlayLayout->setContentsMargins(0, 0, 0, 0);
         busyOverlayLayout->addStretch(1);
-        contentLayerLayout->addWidget(busyOverlay_, 0, 0);
         root->addWidget(contentLayer, 1);
 
         auto *overallCard = new CardFrame;
@@ -1691,18 +1697,23 @@ private:
         overallLayout->addWidget(overallScroll);
         metricsPageLayout->addWidget(overallCard);
 
+        metricsTitle_ = new QLabel;
+        metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        metricsTitle_->setContentsMargins(16, 0, 0, 0);
+        metricsPageLayout->addWidget(metricsTitle_);
+
         auto *metricsCard = new CardFrame;
         metricsCard->setObjectName(QStringLiteral("CardFrame"));
         metricsCard->setInteractive(false);
+        metricsCard_ = metricsCard;
         auto *metricsLayout = new QVBoxLayout(metricsCard);
         metricsLayout->setContentsMargins(16, 16, 16, 16);
         metricsLayout->setSpacing(10);
-        metricsTitle_ = new QLabel(metricsCard);
-        metricsTitle_->setObjectName(QStringLiteral("SectionTitle"));
-        metricsRelation_ = new QLabel(metricsCard);
+        metricsRelation_ = new QLabel;
         metricsRelation_->setObjectName(QStringLiteral("Intro"));
         metricsRelation_->setWordWrap(true);
         metricsRelation_->hide();
+        metricsLayout->addWidget(metricsRelation_);
         metricsSeries_ = new QPieSeries;
         metricsSeries_->setHoleSize(0.52);
         metricsSeries_->setPieSize(0.82);
@@ -1763,12 +1774,17 @@ private:
         auto *rootDetailsCard = new CardFrame;
         rootDetailsCard->setObjectName(QStringLiteral("CardFrame"));
         rootDetailsCard->setInteractive(false);
+        rootDetailsCard_ = rootDetailsCard;
         auto *rootDetailsCardLayout = new QVBoxLayout(rootDetailsCard);
         rootDetailsCardLayout->setContentsMargins(16, 14, 16, 16);
         rootDetailsCardLayout->setSpacing(10);
-        auto *metricsScroll = createCardList(&metricsRows_, 520);
+        auto *metricsScroll = createCardList(&metricsRows_, 260);
+        metricsScroll->setMinimumHeight(0);
+        metricsScroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        metricsScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        metricsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         metricsList_ = metricsScroll->widget();
-        rootDetailsCardLayout->addWidget(metricsScroll);
+        rootDetailsCardLayout->addWidget(metricsScroll, 1);
         rootDetailsLayout->addWidget(rootDetailsCard, 1);
         connect(rootDetailsBackButton_, &QPushButton::clicked, this, [this]() {
             showStatusSubPage(0);
@@ -1787,6 +1803,7 @@ private:
         auto *appsCard = new CardFrame;
         appsCard->setObjectName(QStringLiteral("CardFrame"));
         appsCard->setInteractive(false);
+        appsCard_ = appsCard;
         auto *appsLayout = new QVBoxLayout(appsCard);
         appsLayout->setContentsMargins(16, 14, 16, 16);
         appsLayout->setSpacing(10);
@@ -1830,6 +1847,7 @@ private:
         auto *detailCard = new CardFrame;
         detailCard->setObjectName(QStringLiteral("CardFrame"));
         detailCard->setInteractive(false);
+        detailCard_ = detailCard;
         auto *detailCardLayout = new QVBoxLayout(detailCard);
         detailCardLayout->setContentsMargins(16, 14, 16, 16);
         detailCardLayout->setSpacing(10);
@@ -1860,6 +1878,7 @@ private:
         auto *actionsCard = new CardFrame;
         actionsCard->setObjectName(QStringLiteral("SmartCarePanel"));
         actionsCard->setInteractive(false);
+        actionsCard_ = actionsCard;
         actionsCard->setMinimumHeight(620);
         auto *actionsCardLayout = new QVBoxLayout(actionsCard);
         actionsCardLayout->setContentsMargins(34, 28, 34, 28);
@@ -1929,6 +1948,7 @@ private:
         auto *progressCard = new CardFrame;
         progressCard->setObjectName(QStringLiteral("SmartCarePanel"));
         progressCard->setInteractive(false);
+        scanProgressCard_ = progressCard;
         auto *progressLayout = new QVBoxLayout(progressCard);
         progressLayout->setContentsMargins(34, 30, 34, 30);
         progressLayout->setSpacing(16);
@@ -1959,6 +1979,7 @@ private:
         auto *resultCard = new CardFrame;
         resultCard->setObjectName(QStringLiteral("SmartCarePanel"));
         resultCard->setInteractive(false);
+        scanResultCard_ = resultCard;
         auto *resultLayout = new QVBoxLayout(resultCard);
         resultLayout->setContentsMargins(24, 22, 24, 24);
         resultLayout->setSpacing(14);
@@ -2694,8 +2715,8 @@ private:
         auto *content = new QWidget;
         content->setObjectName(QStringLiteral("CardList"));
         auto *layout = new QVBoxLayout(content);
-        layout->setContentsMargins(2, 2, 2, 28);
-        layout->setSpacing(10);
+        layout->setContentsMargins(2, 2, 2, 16);
+        layout->setSpacing(8);
         scroll->setWidget(content);
         *rows = layout;
         return scroll;
@@ -2749,9 +2770,10 @@ private:
         auto *row = new CardFrame;
         row->setObjectName(total ? QStringLiteral("TotalMetricRow") : QStringLiteral("ChildMetricRow"));
         row->setInteractive(true);
+        row->setFixedHeight(total ? 66 : 58);
         auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(14, total ? 10 : 8, 14, total ? 10 : 8);
-        layout->setSpacing(12);
+        layout->setContentsMargins(14, total ? 8 : 6, 14, total ? 8 : 6);
+        layout->setSpacing(10);
 
         if (!total) {
             auto *rail = new QFrame;
@@ -2767,7 +2789,7 @@ private:
         }
 
         auto *main = new QVBoxLayout;
-        main->setSpacing(7);
+        main->setSpacing(5);
         auto *title = makeLabel(total ? name + QStringLiteral("  ·  总计") : name, QStringLiteral("RowTitle"));
         main->addWidget(title);
 
@@ -3246,7 +3268,6 @@ private:
             delete metricsRows_->takeAt(metricsRows_->count() - 1);
         }
         metricsRows_->addWidget(createMetricRow(name, usage, cleanable, status, value, rootValue, total));
-        metricsRows_->addStretch(1);
     }
 
     void clearMetricChart()
@@ -4315,9 +4336,45 @@ private:
             return;
         }
         const bool scanProgressVisible = scanStack_ && scanStack_->currentIndex() == 1;
-        busyOverlay_->setVisible(busy_ && !scanProgressVisible);
-        if (busyOverlay_->isVisible()) {
+        QWidget *target = busyOverlayTarget();
+        const bool visible = busy_ && !scanProgressVisible && target && target->isVisible() && contentLayer_;
+        busyOverlay_->setVisible(visible);
+        if (visible) {
+            const QPoint origin = target->mapTo(contentLayer_, QPoint(0, 0));
+            busyOverlay_->setGeometry(QRect(origin, target->size()));
             busyOverlay_->raise();
+        }
+    }
+
+    QWidget *busyOverlayTarget() const
+    {
+        if (!tabs_) {
+            return nullptr;
+        }
+        if (tabs_->currentIndex() == 0) {
+            if (!statusStack_) {
+                return metricsCard_;
+            }
+            if (statusStack_->currentIndex() == 0) {
+                return metricsCard_;
+            }
+            if (statusStack_->currentIndex() == 1) {
+                return appsStack_ && appsStack_->currentIndex() == 1 ? detailCard_ : appsCard_;
+            }
+            return rootDetailsCard_;
+        }
+        if (!scanStack_) {
+            return nullptr;
+        }
+        switch (scanStack_->currentIndex()) {
+        case 0:
+            return actionsCard_;
+        case 2:
+            return scanResultCard_;
+        case 3:
+            return planCard_;
+        default:
+            return nullptr;
         }
     }
 
@@ -4766,7 +4823,15 @@ private:
     GlassShellFrame *appShell_ = nullptr;
     QFrame *sideBar_ = nullptr;
     QFrame *topBarFrame_ = nullptr;
+    QFrame *contentLayer_ = nullptr;
     QFrame *busyOverlay_ = nullptr;
+    QWidget *metricsCard_ = nullptr;
+    QWidget *rootDetailsCard_ = nullptr;
+    QWidget *appsCard_ = nullptr;
+    QWidget *detailCard_ = nullptr;
+    QWidget *actionsCard_ = nullptr;
+    QWidget *scanProgressCard_ = nullptr;
+    QWidget *scanResultCard_ = nullptr;
     QLabel *chromeTitle_ = nullptr;
     QLabel *title_ = nullptr;
     QLabel *languageLabel_ = nullptr;

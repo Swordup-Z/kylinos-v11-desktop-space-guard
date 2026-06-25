@@ -1,103 +1,84 @@
 # 麒麟V11空间清理
 
-English name: **KylinOS V11 Desktop Space Cleaner**.
+[English](README.en.md)
 
-麒麟V11空间清理是面向 KylinOS Desktop V11 的保守型桌面清理工具。
-它会展示 Kaiming/KARE 与 ostree 的空间占用，识别 Kaiming 更新后遗留的
-旧版本应用容器，并在用户确认后把安全候选移动到 DATA 隔离区。
-它也可以帮助禁用浪费空间的 Kaiming 自启动行为。
+麒麟V11空间清理是面向 KylinOS Desktop V11 的桌面空间分析与保守清理工具。它用于查看根分区、Kaiming、KARE、ostree 写入层和应用容器占用，并在用户确认后执行可回滚、可审计的清理或优化操作。
 
-The app is intentionally defensive:
+## 功能
 
-- It never deletes `/ostree`, `/sysroot/ostree`, EFI files, GRUB config,
-  loader entries, `/etc/fstab`, or partition tables.
-- It does not rewrite boot configuration.
-- It does not uninstall applications as a cleanup action.
-- It only quarantines clearly non-current Kaiming application container version
-  directories when the user explicitly requests that action.
-- System-level actions require `pkexec` and Kylin maintain mode.
+- 展示根分区总占用，并区分 Kaiming、KARE、ostree 写入层、APP 占用和系统缓存等类别。
+- 展示 Kaiming 应用容器统计和每个应用的容器明细。
+- 识别旧版本 Kaiming 容器，并把安全候选移动到 DATA 回滚隔离区。
+- 管理自启动项，支持禁用已启用项，也支持还原之前禁用过的项目。
+- 显示扫描进度、执行计划、执行结果和失败日志路径。
 
-## Run From Source
+## 安全边界
+
+该工具采用保守策略：
+
+- 不删除 `/ostree`、`/sysroot/ostree`、EFI 文件、GRUB 配置、loader 条目、`/etc/fstab` 或分区表。
+- 不把清理行为伪装成应用卸载。
+- 不静默删除当前正在使用的容器层。
+- 涉及系统级变更时通过 `pkexec` 执行，并遵循 Kylin 维护模式要求。
+- 旧版本容器清理会移动到回滚隔离区，而不是直接永久删除。
+
+## 构建
 
 ```bash
 cmake -S . -B build -G Ninja
 cmake --build build
-./build/kylin-space-cleaner
 ```
 
-Convenience wrapper:
+也可以使用项目内 Makefile：
 
 ```bash
 make
-./build/kylin-space-cleaner
 ```
 
-CLI scan:
-
-```bash
-./bin/kylin-space-guard --dry-run --user "$USER"
-```
-
-## Install For Current User
+## 安装到当前用户
 
 ```bash
 ./install.sh
 ```
 
-or:
+或：
 
 ```bash
 make install
 ```
 
-Then launch **麒麟V11空间清理** from a Chinese desktop session, or
-**KylinOS V11 Desktop Space Cleaner** from an English desktop session. You can
-also run:
+安装后可以从桌面启动 **麒麟V11空间清理**，也可以直接运行：
 
 ```bash
 kylin-space-cleaner
 ```
 
-## Dependencies
+## 命令行
 
-Runtime dependencies are intentionally small:
-
-- `bash`
-- `cmake`
-- `ninja-build`
-- Qt 5 development/runtime packages
-- `pkexec` for privileged actions
-- `/opt/kaiming-tools/bin/kaiming` when Kaiming actions are used
-
-The CLI helper works without `rg`; it falls back to `grep`.
-
-## Common Actions
-
-Move old Kaiming application container versions to a DATA rollback quarantine:
+执行一次扫描：
 
 ```bash
-pkexec kylin-space-guard --apply --user "$USER" --clean-old-app-containers
+kylin-space-cleaner-helper --scan --user "$USER"
 ```
 
-Disable Kaiming/KARE silent autostart entries for the current user:
+查看旧版兼容 CLI：
 
 ```bash
-pkexec kylin-space-guard --apply --user "$USER" --disable-kaiming-autostart
+./bin/kylin-space-guard --dry-run --user "$USER"
 ```
 
-Install a weekly reporting timer:
+## 依赖
 
-```bash
-pkexec kylin-space-guard --apply --user "$USER" --install-monitor
-```
+- CMake
+- Ninja
+- Qt 5 Widgets / Charts
+- `pkexec`
+- Kaiming 相关能力依赖系统中的 Kaiming 工具链
 
-## Design
+## 设计
 
-The default desktop app is now a C++/Qt application. The auditable C++ helper
-owns scans and privileged actions, while the UI presents a plan, selectable
-items, current progress, and a result summary. The original Bash/GTK prototype
-is kept for rule comparison and fallback testing.
+桌面界面使用 C++/Qt Widgets 实现。扫描和高权限操作由本地 helper 执行，GUI 负责展示状态、候选项、选择流程、进度和结果。清理逻辑以可确认、可回滚和可验证为优先级。
 
-## License
+## 许可证
 
 MIT
