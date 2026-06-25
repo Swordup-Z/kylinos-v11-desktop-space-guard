@@ -3,3 +3,9 @@ __pycache__/
 *.log
 .venv/
 build/
+build-codex/
+_CPack_Packages/
+*.deb
+docs/reference-cleanmymac/page.html
+docs/reference-cleanmymac/site/
+docs/reference-cleanmymac/analysis/

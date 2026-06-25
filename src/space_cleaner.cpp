@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QBoxLayout>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
@@ -9,21 +10,25 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFrame>
+#include <QGridLayout>
 #include <QGraphicsOpacityEffect>
 #include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QParallelAnimationGroup>
 #include <QProcess>
 #include <QProgressBar>
 #include <QPropertyAnimation>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QStyle>
 #include <QStackedWidget>
 #include <QTabBar>
@@ -31,6 +36,7 @@
 #include <QTimer>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
+#include <QtCharts/QLegendMarker>
 #include <QtCharts/QPieSeries>
 #include <QtCharts/QPieSlice>
 
@@ -47,7 +53,7 @@ public:
     explicit SpaceVisual(QWidget *parent = nullptr)
         : QWidget(parent)
     {
-        setFixedSize(210, 118);
+        setFixedSize(260, 150);
         auto *animation = new QPropertyAnimation(this, "phase", this);
         animation->setDuration(5200);
         animation->setStartValue(0.0);
@@ -89,49 +95,56 @@ protected:
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        const qreal baseWidth = 260.0;
+        const qreal baseHeight = 210.0;
+        const qreal scale = qMin(width() / baseWidth, height() / baseHeight);
+        painter.translate((width() - baseWidth * scale) / 2.0,
+                          (height() - baseHeight * scale) / 2.0);
+        painter.scale(scale, scale);
 
-        const QRectF card(1, 1, width() - 2, height() - 2);
+        const QRectF card(1, 1, baseWidth - 2, baseHeight - 2);
         QLinearGradient bg(card.topLeft(), card.bottomRight());
-        bg.setColorAt(0.00, QColor(255, 255, 255, 210));
-        bg.setColorAt(0.54, QColor(247, 249, 252, 178));
-        bg.setColorAt(1.00, QColor(233, 238, 244, 132));
-        painter.setPen(QPen(QColor(255, 255, 255, 168), 1));
+        bg.setColorAt(0.00, QColor(255, 255, 255, 30));
+        bg.setColorAt(0.48, QColor(255, 255, 255, 14));
+        bg.setColorAt(1.00, QColor(255, 255, 255, 8));
+        painter.setPen(QPen(QColor(255, 255, 255, 38), 1));
         painter.setBrush(bg);
         painter.drawRoundedRect(card, 8, 8);
 
-        QRadialGradient wash(QPointF(58, 58), 62);
-        wash.setColorAt(0.00, QColor(18, 22, 30, 42));
-        wash.setColorAt(0.58, QColor(72, 82, 95, 18));
+        QRadialGradient wash(QPointF(76, 74), 74);
+        wash.setColorAt(0.00, QColor(35, 240, 174, 56));
+        wash.setColorAt(0.58, QColor(42, 187, 220, 18));
         wash.setColorAt(1.00, QColor(18, 22, 30, 0));
         painter.setPen(Qt::NoPen);
         painter.setBrush(wash);
-        painter.drawEllipse(QPointF(58, 58), 62, 38);
+        painter.drawEllipse(QPointF(76, 74), 70, 42);
 
-        QRadialGradient mistWash(QPointF(155, 60), 58);
-        mistWash.setColorAt(0.00, QColor(98, 118, 138, 38 + static_cast<int>(26 * activity_)));
-        mistWash.setColorAt(0.66, QColor(98, 118, 138, 12));
+        QRadialGradient mistWash(QPointF(184, 70), 72);
+        mistWash.setColorAt(0.00, QColor(255, 62, 219, 38 + static_cast<int>(36 * activity_)));
+        mistWash.setColorAt(0.66, QColor(255, 133, 60, 14));
         mistWash.setColorAt(1.00, QColor(98, 118, 138, 0));
         painter.setBrush(mistWash);
-        painter.drawEllipse(QPointF(155, 60), 58, 38);
+        painter.drawEllipse(QPointF(184, 70), 70, 44);
 
-        const QColor ink(28, 31, 36);
-        const QColor graphite(66, 72, 82);
-        const QColor mist(103, 121, 139);
-        const QColor silver(157, 168, 181);
+        const QColor ink(255, 255, 255);
+        const QColor graphite(202, 215, 234);
+        const QColor mist(38, 232, 180);
+        const QColor silver(255, 169, 74);
 
         for (int i = 0; i < 3; ++i) {
-            const QRectF layer(26 + i * 7, 31 + i * 16, 62, 14);
-            painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 90 - i * 18), 1));
-            painter.setBrush(QColor(255, 255, 255, 138 - i * 14));
+            const QRectF layer(32 + i * 8, 42 + i * 18, 76, 16);
+            painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 80 - i * 16), 1));
+            painter.setBrush(QColor(255, 255, 255, 36 - i * 6));
             painter.drawRoundedRect(layer, 7, 7);
             painter.setPen(QPen(QColor(graphite.red(), graphite.green(), graphite.blue(), 54), 1));
             painter.drawLine(layer.left() + 11, layer.center().y(), layer.right() - 12, layer.center().y());
         }
 
         QPainterPath flow;
-        flow.moveTo(83, 58);
-        flow.cubicTo(105, 30, 132, 86, 154, 58);
-        flow.cubicTo(166, 43, 178, 47, 188, 57);
+        flow.moveTo(105, 74);
+        flow.cubicTo(128, 34, 158, 106, 185, 70);
+        flow.cubicTo(200, 50, 218, 56, 232, 70);
         painter.setPen(QPen(QColor(mist.red(), mist.green(), mist.blue(), 58 + static_cast<int>(86 * activity_)),
                             2.4 + activity_ * 1.1,
                             Qt::SolidLine,
@@ -140,8 +153,8 @@ protected:
 
         for (int i = 0; i < 6; ++i) {
             const qreal t = std::fmod(phase_ + i * 0.17, 1.0);
-            const qreal x = 86 + t * 98;
-            const qreal y = 58 + std::sin((t * 2.0 + phase_) * 3.14159265359) * 12;
+            const qreal x = 108 + t * 122;
+            const qreal y = 72 + std::sin((t * 2.0 + phase_) * 3.14159265359) * 14;
             const int alpha = 42 + static_cast<int>(118 * activity_);
             const QColor dot = i % 2 ? silver : ink;
             painter.setBrush(QColor(dot.red(), dot.green(), dot.blue(), alpha));
@@ -149,32 +162,32 @@ protected:
             painter.drawEllipse(QPointF(x, y), 1.8 + activity_ * 1.6, 1.8 + activity_ * 1.6);
         }
 
-        const QPointF ringCenter(163, 59);
-        const QRectF outer(ringCenter.x() - 30, ringCenter.y() - 30, 60, 60);
+        const QPointF ringCenter(198, 74);
+        const QRectF outer(ringCenter.x() - 38, ringCenter.y() - 38, 76, 76);
         const qreal quietPulse = 0.5 + 0.5 * std::sin(phase_ * 6.28318530718);
-        painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 44), 7, Qt::SolidLine, Qt::RoundCap));
+        painter.setPen(QPen(QColor(255, 255, 255, 38), 8, Qt::SolidLine, Qt::RoundCap));
         painter.drawArc(outer, 40 * 16, 285 * 16);
         painter.setPen(QPen(QColor(mist.red(), mist.green(), mist.blue(),
-                                   126 + static_cast<int>(70 * activity_)),
-                            7,
+                                   150 + static_cast<int>(70 * activity_)),
+                            8,
                             Qt::SolidLine,
                             Qt::RoundCap));
         painter.drawArc(outer,
                         static_cast<int>((84 + phase_ * 360) * 16),
                         static_cast<int>((88 + quietPulse * 24 + activity_ * 52) * 16));
 
-        painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 82), 1));
-        painter.setBrush(QColor(255, 255, 255, 145));
-        painter.drawEllipse(ringCenter, 14, 14);
-        painter.setBrush(QColor(ink.red(), ink.green(), ink.blue(), 185));
+        painter.setPen(QPen(QColor(255, 255, 255, 76), 1));
+        painter.setBrush(QColor(255, 255, 255, 54));
+        painter.drawEllipse(ringCenter, 18, 18);
+        painter.setBrush(QColor(255, 255, 255, 220));
         painter.setPen(Qt::NoPen);
-        painter.drawEllipse(ringCenter, 4.5, 4.5);
+        painter.drawEllipse(ringCenter, 5.5, 5.5);
 
         painter.setPen(QPen(QColor(ink.red(), ink.green(), ink.blue(), 32), 1));
-        painter.drawLine(QPointF(116, 94), QPointF(190, 94));
+        painter.drawLine(QPointF(132, 120), QPointF(232, 120));
         painter.setPen(QPen(QColor(mist.red(), mist.green(), mist.blue(), 126), 1.4));
-        const qreal x = 116 + std::fmod(phase_ * 96, 74.0);
-        painter.drawLine(QPointF(x, 94), QPointF(x + 18, 94));
+        const qreal x = 132 + std::fmod(phase_ * 122, 100.0);
+        painter.drawLine(QPointF(x, 120), QPointF(x + 22, 120));
     }
 
 private:
@@ -191,6 +204,158 @@ static QColor mixedColor(const QColor &a, const QColor &b, qreal t)
                   static_cast<int>(a.blue() + (b.blue() - a.blue()) * t),
                   static_cast<int>(a.alpha() + (b.alpha() - a.alpha()) * t));
 }
+
+class GlassShellFrame : public QFrame {
+    Q_OBJECT
+    Q_PROPERTY(qreal phase READ phase WRITE setPhase)
+    Q_PROPERTY(qreal themeBlend READ themeBlend WRITE setThemeBlend)
+
+public:
+    explicit GlassShellFrame(QWidget *parent = nullptr)
+        : QFrame(parent)
+    {
+        setAutoFillBackground(false);
+        motionTimer_ = new QTimer(this);
+        connect(motionTimer_, &QTimer::timeout, this, [this]() {
+            phase_ += 0.0042;
+            if (phase_ > 10000.0) {
+                phase_ = std::fmod(phase_, 1.0);
+            }
+            update();
+        });
+        motionTimer_->start(33);
+
+        themeAnimation_ = new QPropertyAnimation(this, "themeBlend", this);
+        themeAnimation_->setDuration(280);
+        themeAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    }
+
+    qreal phase() const { return phase_; }
+    qreal themeBlend() const { return themeBlend_; }
+
+    void setPhase(qreal phase)
+    {
+        phase_ = phase;
+        if (qApp) {
+            qApp->setProperty("spaceGuardGlassPhase", phase_);
+        }
+        update();
+    }
+
+    void setThemeBlend(qreal blend)
+    {
+        themeBlend_ = qBound<qreal>(0.0, blend, 1.0);
+        update();
+    }
+
+    void setTargetTheme(int theme)
+    {
+        theme = qBound(0, theme, 2);
+        if (theme == targetTheme_ && themeBlend_ >= 1.0) {
+            return;
+        }
+        sourceTheme_ = blendedThemeIndex_;
+        targetTheme_ = theme;
+        themeAnimation_->stop();
+        themeAnimation_->setStartValue(0.0);
+        themeAnimation_->setEndValue(1.0);
+        themeAnimation_->start();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        const QRectF rect(0.5, 0.5, width() - 1, height() - 1);
+        const ThemeColors from = colorsForTheme(sourceTheme_);
+        const ThemeColors to = colorsForTheme(targetTheme_);
+        const qreal eased = themeBlend_;
+        const QColor a = mixedColor(from.a, to.a, eased);
+        const QColor b = mixedColor(from.b, to.b, eased);
+        const QColor c = mixedColor(from.c, to.c, eased);
+        const QColor d = mixedColor(from.d, to.d, eased);
+        const QColor accent = mixedColor(from.accent, to.accent, eased);
+        blendedThemeIndex_ = eased >= 1.0 ? targetTheme_ : sourceTheme_;
+
+        QPainterPath shape;
+        shape.addRoundedRect(rect, 8, 8);
+        painter.setClipPath(shape);
+
+        QLinearGradient base(rect.topLeft(), rect.bottomRight());
+        base.setColorAt(0.00, a);
+        base.setColorAt(0.32, b);
+        base.setColorAt(0.68, c);
+        base.setColorAt(1.00, d);
+        painter.fillPath(shape, base);
+
+        const qreal orbit = phase_ * 6.28318530718;
+        const QPointF leftWash(rect.left() + rect.width() * (0.18 + 0.05 * std::sin(orbit)),
+                               rect.top() + rect.height() * (0.18 + 0.05 * std::cos(orbit * 0.8)));
+        QRadialGradient first(leftWash, rect.width() * 0.58);
+        first.setColorAt(0.00, QColor(255, 255, 255, 82));
+        first.setColorAt(0.22, mixedColor(from.wash, to.wash, eased));
+        first.setColorAt(0.66, QColor(255, 255, 255, 16));
+        first.setColorAt(1.00, QColor(255, 255, 255, 0));
+        painter.fillRect(rect, first);
+
+        const QPointF rightWash(rect.left() + rect.width() * (0.78 + 0.06 * std::cos(orbit * 0.7)),
+                                rect.top() + rect.height() * (0.48 + 0.07 * std::sin(orbit)));
+        QRadialGradient second(rightWash, rect.width() * 0.52);
+        second.setColorAt(0.00, accent);
+        second.setColorAt(0.55, QColor(accent.red(), accent.green(), accent.blue(), 30));
+        second.setColorAt(1.00, QColor(accent.red(), accent.green(), accent.blue(), 0));
+        painter.fillRect(rect, second);
+
+        const qreal sheenDrift = 0.5 + 0.5 * std::sin(orbit * 0.42);
+        const qreal sheenSpread = 0.5 + 0.5 * std::sin(orbit * 0.42 + 1.35);
+        QLinearGradient sheen(QPointF(rect.left() + rect.width() * (0.08 + sheenDrift * 0.38), rect.top()),
+                              QPointF(rect.left() + rect.width() * (0.52 + sheenSpread * 0.34), rect.bottom()));
+        sheen.setColorAt(0.00, QColor(255, 255, 255, 0));
+        sheen.setColorAt(0.46, QColor(255, 255, 255, 28));
+        sheen.setColorAt(0.56, QColor(255, 255, 255, 12));
+        sheen.setColorAt(1.00, QColor(255, 255, 255, 0));
+        painter.fillRect(rect, sheen);
+
+        painter.setClipping(false);
+        painter.setPen(QPen(QColor(255, 255, 255, 44), 1));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRoundedRect(rect, 8, 8);
+    }
+
+private:
+    struct ThemeColors {
+        QColor a;
+        QColor b;
+        QColor c;
+        QColor d;
+        QColor wash;
+        QColor accent;
+    };
+
+    static ThemeColors colorsForTheme(int theme)
+    {
+        if (theme == 1) {
+            return {QColor(4, 111, 119), QColor(18, 82, 143), QColor(17, 41, 121), QColor(7, 3, 64),
+                    QColor(115, 236, 222, 54), QColor(64, 235, 213, 88)};
+        }
+        if (theme == 2) {
+            return {QColor(161, 45, 183), QColor(83, 20, 145), QColor(39, 5, 96), QColor(9, 2, 62),
+                    QColor(255, 151, 238, 76), QColor(255, 62, 219, 90)};
+        }
+        return {QColor(161, 52, 9), QColor(134, 46, 18), QColor(91, 18, 86), QColor(23, 3, 61),
+                QColor(255, 151, 238, 76), QColor(255, 128, 42, 88)};
+    }
+
+    qreal phase_ = 0.0;
+    qreal themeBlend_ = 1.0;
+    int sourceTheme_ = 0;
+    int targetTheme_ = 0;
+    int blendedThemeIndex_ = 0;
+    QTimer *motionTimer_ = nullptr;
+    QPropertyAnimation *themeAnimation_ = nullptr;
+};
 
 class CardFrame : public QFrame {
     Q_OBJECT
@@ -245,19 +410,51 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         const QRectF rect = QRectF(0.5, 0.5, width() - 1, height() - 1);
+        if (objectName() == QStringLiteral("RootOverviewCard")) {
+            return;
+        }
+        const int theme = qApp ? qApp->property("spaceGuardTheme").toInt() : 0;
+        const QColor glassPanel(255, 255, 255, 20);
+        const QColor glassPanelHover(255, 255, 255, 34);
+        const QColor glassRow(255, 255, 255, 16);
+        const QColor glassRowHover(255, 255, 255, 30);
+        const QColor borderBase = theme == 1 ? QColor(77, 221, 213, 120)
+                                : theme == 2 ? QColor(207, 142, 255, 118)
+                                             : QColor(255, 165, 102, 126);
+        const QColor borderHover = theme == 1 ? QColor(120, 255, 231, 178)
+                                 : theme == 2 ? QColor(255, 116, 232, 176)
+                                              : QColor(255, 196, 128, 182);
 
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(28, 31, 36, 10 + static_cast<int>(10 * hover_)));
         painter.drawRoundedRect(rect.adjusted(1, 3 + hover_, -1, -1), 8, 8);
 
-        QColor background = mixedColor(QColor(255, 255, 255), QColor(248, 251, 253), hover_);
-        QColor border = mixedColor(QColor(217, 223, 231), QColor(155, 173, 190), hover_);
-        if (objectName() == QStringLiteral("TotalMetricRow")) {
-            background = mixedColor(QColor(248, 250, 252), QColor(239, 244, 248), hover_);
-            border = mixedColor(QColor(132, 146, 160), QColor(82, 96, 110), hover_);
+        QColor background = mixedColor(glassPanel, glassPanelHover, hover_);
+        QColor border = mixedColor(borderBase, borderHover, hover_);
+        if (objectName() == QStringLiteral("SmartSummaryCard")) {
+            background = mixedColor(QColor(255, 255, 255, 18), QColor(255, 255, 255, 32), hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("SmartCarePanel")) {
+            background = mixedColor(QColor(255, 255, 255, 14), QColor(255, 255, 255, 25), hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("SmartTaskCard")) {
+            background = mixedColor(glassRow, glassRowHover, hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("OptimizationTaskRow") || objectName() == QStringLiteral("AutostartActionRow")) {
+            background = mixedColor(glassRow, glassRowHover, hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("TotalMetricRow")) {
+            background = mixedColor(QColor(255, 255, 255, 20), QColor(255, 255, 255, 34), hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
         } else if (objectName() == QStringLiteral("ChildMetricRow")) {
-            background = mixedColor(QColor(255, 255, 255), QColor(250, 252, 253), hover_);
-            border = mixedColor(QColor(224, 229, 235), QColor(170, 184, 198), hover_);
+            background = mixedColor(glassRow, glassRowHover, hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("InfoRow") || objectName() == QStringLiteral("ContainerRow")) {
+            background = mixedColor(glassRow, glassRowHover, hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
+        } else if (objectName() == QStringLiteral("CardFrame")) {
+            background = mixedColor(glassPanel, glassPanelHover, hover_);
+            border = mixedColor(borderBase, borderHover, hover_);
         }
         painter.setBrush(background);
         painter.setPen(QPen(border, 1));
@@ -343,21 +540,59 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
 
-        const bool primary = objectName() == QStringLiteral("PrimaryButton") || objectName() == QStringLiteral("NavSelected");
+        const bool orb = objectName() == QStringLiteral("OrbButton");
+        const bool nav = objectName() == QStringLiteral("NavButton");
+        const bool navSelected = objectName() == QStringLiteral("NavSelected");
+        const bool sideNav = nav || navSelected;
+        const bool action = objectName() == QStringLiteral("ActionButton");
+        const bool headerScan = objectName() == QStringLiteral("HeaderScanButton");
+        const bool primary = objectName() == QStringLiteral("PrimaryButton") || navSelected || orb;
         const bool chrome = objectName() == QStringLiteral("ChromeButton") || objectName() == QStringLiteral("CloseButton");
+        const bool trafficClose = objectName() == QStringLiteral("TrafficCloseButton");
+        const bool trafficMin = objectName() == QStringLiteral("TrafficMinButton");
+        const bool trafficMax = objectName() == QStringLiteral("TrafficMaxButton");
+        const bool traffic = trafficClose || trafficMin || trafficMax;
         const bool close = objectName() == QStringLiteral("CloseButton");
-        QColor base = primary ? QColor(29, 29, 31) : QColor(255, 255, 255);
-        QColor hoverColor = primary ? QColor(55, 61, 70) : QColor(241, 245, 249);
-        QColor pressColor = primary ? QColor(18, 22, 30) : QColor(227, 234, 242);
-        QColor border = primary ? QColor(29, 29, 31) : QColor(203, 211, 221);
+        QColor base = primary ? QColor(178, 40, 224) : QColor(255, 255, 255);
+        QColor hoverColor = primary ? QColor(222, 64, 238) : QColor(241, 245, 249);
+        QColor pressColor = primary ? QColor(106, 32, 172) : QColor(227, 234, 242);
+        QColor border = primary ? QColor(244, 124, 255) : QColor(203, 211, 221);
         QColor textColor = primary ? QColor(255, 255, 255) : QColor(29, 29, 31);
         if (chrome) {
             base = QColor(255, 255, 255, 0);
             hoverColor = close ? QColor(255, 69, 58, 34) : QColor(29, 31, 36, 18);
             pressColor = close ? QColor(255, 69, 58, 58) : QColor(29, 31, 36, 30);
             border = QColor(255, 255, 255, 0);
-            textColor = close ? mixedColor(QColor(67, 72, 81), QColor(190, 52, 48), hover_)
-                              : QColor(67, 72, 81);
+            textColor = close ? mixedColor(QColor(255, 255, 255, 220), QColor(255, 92, 86), hover_)
+                              : QColor(255, 255, 255, 220);
+        } else if (navSelected) {
+            base = QColor(255, 180, 241, 48);
+            hoverColor = QColor(255, 202, 247, 68);
+            pressColor = QColor(255, 154, 236, 76);
+            border = QColor(255, 255, 255, 44);
+            textColor = QColor(255, 255, 255);
+        } else if (nav) {
+            base = QColor(255, 255, 255, 0);
+            hoverColor = QColor(255, 255, 255, 34);
+            pressColor = QColor(255, 255, 255, 54);
+            border = QColor(255, 255, 255, 0);
+            textColor = QColor(232, 222, 248);
+        } else if (action) {
+            base = QColor(255, 255, 255, 26);
+            hoverColor = QColor(255, 255, 255, 42);
+            pressColor = QColor(255, 255, 255, 56);
+            border = QColor(255, 255, 255, 42);
+            textColor = QColor(248, 244, 255);
+        } else if (headerScan) {
+            const int theme = qApp ? qApp->property("spaceGuardTheme").toInt() : 0;
+            const QColor accent = theme == 1 ? QColor(66, 235, 213)
+                                : theme == 2 ? QColor(223, 53, 255)
+                                             : QColor(255, 145, 56);
+            base = QColor(accent.red(), accent.green(), accent.blue(), 58);
+            hoverColor = QColor(accent.red(), accent.green(), accent.blue(), 82);
+            pressColor = QColor(accent.red(), accent.green(), accent.blue(), 104);
+            border = QColor(255, 255, 255, 54);
+            textColor = QColor(255, 255, 255);
         }
 
         if (!isEnabled()) {
@@ -368,23 +603,96 @@ protected:
             textColor = QColor(164, 169, 177);
         }
 
+        if (traffic) {
+            QColor dot = trafficClose ? QColor(255, 92, 86)
+                         : trafficMin ? QColor(255, 189, 46)
+                                      : QColor(39, 201, 63);
+            dot = mixedColor(dot, QColor(255, 255, 255), hover_ * 0.16);
+            const QRectF circle(width() / 2.0 - 6.5,
+                                height() / 2.0 - 6.5 + press_,
+                                13,
+                                13);
+            painter.setPen(QPen(QColor(255, 255, 255, 70), 1));
+            painter.setBrush(dot);
+            painter.drawEllipse(circle);
+            return;
+        }
+
+        if (orb) {
+            const QRectF glow = QRectF(4, 4 + press_ * 1.5, width() - 8, height() - 8);
+            QRadialGradient halo(glow.center(), glow.width() * 0.62);
+            halo.setColorAt(0.00, QColor(255, 45, 222, 170));
+            halo.setColorAt(0.58, QColor(195, 55, 255, 92 + static_cast<int>(50 * hover_)));
+            halo.setColorAt(1.00, QColor(34, 8, 84, 0));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(halo);
+            painter.drawEllipse(glow.adjusted(-12, -12, 12, 12));
+
+            QRadialGradient fillGradient(glow.topLeft(), glow.width());
+            fillGradient.setColorAt(0.00, QColor(255, 84, 230));
+            fillGradient.setColorAt(0.56, QColor(180, 35, 230));
+            fillGradient.setColorAt(1.00, QColor(94, 28, 178));
+            painter.setPen(QPen(QColor(255, 255, 255, 150), 2));
+            painter.setBrush(fillGradient);
+            painter.drawEllipse(glow);
+            painter.setPen(QColor(255, 255, 255));
+            QFont orbFont = font();
+            orbFont.setBold(true);
+            painter.setFont(orbFont);
+            painter.drawText(glow.adjusted(12, 8, -12, -8), Qt::AlignCenter | Qt::TextWordWrap, text());
+            return;
+        }
+
         QColor fill = mixedColor(mixedColor(base, hoverColor, hover_), pressColor, press_);
         border = chrome ? border : mixedColor(border, QColor(111, 130, 150), hover_);
 
-        const QRectF rect = QRectF(0.5, 0.5 + press_ * 1.0, width() - 1, height() - 1 - press_ * 1.0);
-        if (!chrome) {
+        const QRectF outerRect = QRectF(0.5, 0.5 + press_ * 1.0, width() - 1, height() - 1 - press_ * 1.0);
+        QRectF rect = outerRect;
+        if (sideNav) {
+            const QSizeF highlightSize(54, 54);
+            const qreal visualCenterOffset = property("navVisualOffset").toReal();
+            rect = QRectF((width() - highlightSize.width()) / 2.0 + visualCenterOffset,
+                          (height() - highlightSize.height()) / 2.0 + press_ * 1.0,
+                          highlightSize.width(),
+                          highlightSize.height());
+        }
+        if (!chrome && !sideNav) {
             painter.setPen(Qt::NoPen);
             painter.setBrush(QColor(28, 31, 36, static_cast<int>(14 * hover_)));
             painter.drawRoundedRect(rect.adjusted(0, 2, 0, 2), 7, 7);
         }
         painter.setPen(QPen(border, 1));
         painter.setBrush(fill);
-        painter.drawRoundedRect(rect, 7, 7);
+        const qreal radius = sideNav ? 12.0 : 7.0;
+        painter.drawRoundedRect(rect, radius, radius);
+        if (chrome) {
+            const QString windowAction = property("windowAction").toString();
+            if (!windowAction.isEmpty()) {
+                painter.setPen(QPen(textColor, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                const QPointF c(rect.center().x(), rect.center().y() - 6);
+                if (windowAction == QStringLiteral("minimize")) {
+                    painter.drawLine(QPointF(c.x() - 5.5, c.y()), QPointF(c.x() + 5.5, c.y()));
+                } else if (windowAction == QStringLiteral("maximize")) {
+                    painter.drawRoundedRect(QRectF(c.x() - 5.0, c.y() - 5.0, 10.0, 10.0), 1.5, 1.5);
+                } else if (windowAction == QStringLiteral("close")) {
+                    painter.drawLine(QPointF(c.x() - 5.0, c.y() - 5.0), QPointF(c.x() + 5.0, c.y() + 5.0));
+                    painter.drawLine(QPointF(c.x() + 5.0, c.y() - 5.0), QPointF(c.x() - 5.0, c.y() + 5.0));
+                }
+                return;
+            }
+        }
 
         const qreal padding = chrome ? 0.0 : 14.0;
         QRectF textRect = rect.adjusted(padding, 0, -padding, 0);
         painter.setPen(textColor);
         painter.setFont(font());
+        if (sideNav) {
+            const QString navKind = property("navKind").toString();
+            if (!navKind.isEmpty()) {
+                drawNavGlyph(painter, rect, navKind, textColor);
+                return;
+            }
+        }
         if (!chrome && !icon().isNull()) {
             const QSize iconExtent = iconSize().isValid() ? iconSize() : QSize(18, 18);
             const int spacing = text().isEmpty() ? 0 : 8;
@@ -407,6 +715,59 @@ protected:
     }
 
 private:
+    void drawNavGlyph(QPainter &painter, const QRectF &rect, const QString &kind, const QColor &color)
+    {
+        painter.save();
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(color, 2.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+
+        const QPointF c = rect.center();
+        const QRectF box(c.x() - 13, c.y() - 13, 26, 26);
+        if (kind == QStringLiteral("space")) {
+            QPainterPath path;
+            path.moveTo(c.x() - 11, c.y() + 7);
+            path.lineTo(c.x() - 4, c.y() - 7);
+            path.lineTo(c.x() + 11, c.y() - 7);
+            path.lineTo(c.x() + 4, c.y() + 7);
+            path.closeSubpath();
+            painter.setBrush(QColor(color.red(), color.green(), color.blue(), 238));
+            painter.setPen(Qt::NoPen);
+            painter.drawPath(path);
+        } else if (kind == QStringLiteral("apps")) {
+            painter.setPen(QPen(color, 2.8, Qt::SolidLine, Qt::RoundCap));
+            for (int i = 0; i < 3; ++i) {
+                const qreal y = c.y() - 8 + i * 8;
+                painter.drawLine(QPointF(c.x() - 10, y), QPointF(c.x() - 2, y));
+                painter.drawLine(QPointF(c.x() + 5, y), QPointF(c.x() + 10, y));
+            }
+        } else if (kind == QStringLiteral("container")) {
+            QPainterPath path;
+            path.moveTo(c.x() - 12, c.y() + 6);
+            path.lineTo(c.x() - 5, c.y() - 7);
+            path.lineTo(c.x() + 12, c.y() - 7);
+            path.lineTo(c.x() + 5, c.y() + 6);
+            path.closeSubpath();
+            painter.drawPath(path);
+        } else if (kind == QStringLiteral("autostart")) {
+            painter.setPen(QPen(color, 2.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawLine(QPointF(c.x() - 9, c.y() + 9), QPointF(c.x() + 9, c.y() - 9));
+            painter.drawLine(QPointF(c.x() + 9, c.y() - 9), QPointF(c.x() + 9, c.y() + 2));
+            painter.drawLine(QPointF(c.x() + 9, c.y() - 9), QPointF(c.x() - 2, c.y() - 9));
+        } else if (kind == QStringLiteral("scan")) {
+            painter.setPen(QPen(color, 2.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawArc(box.adjusted(3, 3, -3, -3), 35 * 16, 285 * 16);
+            QPainterPath head;
+            head.moveTo(c.x() + 10, c.y() - 2);
+            head.lineTo(c.x() + 14, c.y() + 5);
+            head.lineTo(c.x() + 6, c.y() + 5);
+            painter.setBrush(color);
+            painter.setPen(Qt::NoPen);
+            painter.drawPath(head);
+        }
+        painter.restore();
+    }
+
     void animate(QPropertyAnimation *animation, qreal start, qreal target)
     {
         animation->stop();
@@ -451,6 +812,8 @@ public:
     CleanerWindow()
     {
         setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setAutoFillBackground(false);
         user_ = qEnvironmentVariable("USER");
         if (user_.isEmpty()) {
             user_ = QStringLiteral("zengjianqi");
@@ -460,15 +823,38 @@ public:
             helper_ = QApplication::applicationDirPath() + QStringLiteral("/../libexec/kylin-space-cleaner-helper");
         }
 
-        setMinimumSize(1180, 860);
+        setMinimumSize(1040, 760);
         buildUi();
         applyLanguage();
+        resize(1040, 760);
         if (tabs_) {
             tabs_->setCurrentIndex(0);
         }
+        applyPageTheme();
         QTimer::singleShot(100, this, [this]() {
             scanInternal(false);
         });
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const QRectF rect(0.5, 0.5, width() - 1, height() - 1);
+        const int theme = qApp ? qApp->property("spaceGuardTheme").toInt() : 0;
+        const QColor a = theme == 1 ? QColor(4, 111, 119)
+                       : theme == 2 ? QColor(161, 45, 183)
+                                    : QColor(161, 52, 9);
+        const QColor b = theme == 1 ? QColor(7, 3, 64)
+                       : theme == 2 ? QColor(9, 2, 62)
+                                    : QColor(23, 3, 61);
+        QLinearGradient gradient(rect.topLeft(), rect.bottomRight());
+        gradient.setColorAt(0.0, a);
+        gradient.setColorAt(1.0, b);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(gradient);
+        painter.drawRoundedRect(rect, 8, 8);
     }
 
 private:
@@ -500,6 +886,9 @@ private:
         QString ostree;
         QString kare;
         QString otherRoot;
+        QString kareBase;
+        QString appPayload;
+        QString systemOther;
         QString metricsRelation;
         QString overallTitle;
         QString explainedUsage;
@@ -556,6 +945,12 @@ private:
         QString kaimingRelation;
     };
 
+    struct AutostartSelectionRow {
+        QString id;
+        bool currentlyEnabled = false;
+        QCheckBox *box = nullptr;
+    };
+
     static Text zh()
     {
         return {
@@ -568,7 +963,7 @@ private:
             QStringLiteral("扫描"),
             QStringLiteral("开始扫描"),
             QStringLiteral("清理旧容器"),
-            QStringLiteral("管理预热/自启动"),
+            QStringLiteral("管理自启动项"),
             QStringLiteral("正在扫描"),
             QStringLiteral("正在读取系统空间、Kaiming 容器和启动项状态"),
             QStringLiteral("扫描结果"),
@@ -576,17 +971,20 @@ private:
             QStringLiteral("重新扫描"),
             QStringLiteral("可优化条目"),
             QStringLiteral("旧版本容器清理"),
-            QStringLiteral("预热/自启动优化"),
+            QStringLiteral("自启动项优化"),
             QStringLiteral("项目"),
             QStringLiteral("当前占用"),
             QStringLiteral("可清理"),
             QStringLiteral("状态"),
-            QStringLiteral("根分区已用"),
+            QStringLiteral("根分区总占用（不含 /home /data）"),
             QStringLiteral("Kaiming"),
             QStringLiteral("ostree 写入层"),
             QStringLiteral("KARE 写入层"),
             QStringLiteral("其他根分区占用"),
-            QStringLiteral("根分区已用是总量；下面几项是已识别的子项或重点写入层，其他根分区占用包含系统基线、KARE base、普通应用目录、日志和缓存等未单独拆出的内容。"),
+            QStringLiteral("KARE base"),
+            QStringLiteral("WPS/应用"),
+            QStringLiteral("系统与缓存"),
+            QStringLiteral("根分区总占用来自 / 文件系统本身，不包含独立挂载的 /home 和 /data；下面几项是已识别的子项或重点写入层，其他根分区占用包含系统基线、KARE base、普通应用目录、日志和缓存等未单独拆出的内容。"),
             QStringLiteral("整体空间占用"),
             QStringLiteral("已识别子项"),
             QStringLiteral("阶段"),
@@ -598,9 +996,9 @@ private:
             QStringLiteral("完成"),
             QStringLiteral("失败"),
             QStringLiteral("计划"),
-            QStringLiteral("管理预热/自启动项"),
+            QStringLiteral("管理自启动项"),
             QStringLiteral("选择要清理的旧版本容器"),
-            QStringLiteral("当前没有发现可管理的预热/自启动项。"),
+            QStringLiteral("当前没有发现可管理的自启动项。"),
             QStringLiteral("当前没有发现可安全清理的旧版本容器。"),
             QStringLiteral("错误"),
             QStringLiteral("当前状态"),
@@ -655,7 +1053,7 @@ private:
             QStringLiteral("Scan"),
             QStringLiteral("Start Scan"),
             QStringLiteral("Clean Old Containers"),
-            QStringLiteral("Manage Preheat/Autostart"),
+            QStringLiteral("Manage Autostart Entries"),
             QStringLiteral("Scanning"),
             QStringLiteral("Reading system usage, Kaiming containers, and startup entries"),
             QStringLiteral("Scan Results"),
@@ -663,17 +1061,20 @@ private:
             QStringLiteral("Rescan"),
             QStringLiteral("Optimization Items"),
             QStringLiteral("Old Container Cleanup"),
-            QStringLiteral("Preheat/Autostart Optimization"),
+            QStringLiteral("Autostart Entry Optimization"),
             QStringLiteral("Item"),
             QStringLiteral("Current Usage"),
             QStringLiteral("Cleanable"),
             QStringLiteral("Status"),
-            QStringLiteral("Root Used"),
+            QStringLiteral("Root Total Used (excluding /home /data)"),
             QStringLiteral("Kaiming"),
             QStringLiteral("ostree Upper"),
             QStringLiteral("KARE Upper"),
             QStringLiteral("Other Root Usage"),
-            QStringLiteral("Root usage is the total. The rows below are recognized child categories or key writable layers. Other root usage includes the system baseline, KARE base, ordinary app directories, logs, caches, and anything not broken out separately."),
+            QStringLiteral("KARE base"),
+            QStringLiteral("WPS/Apps"),
+            QStringLiteral("System & Cache"),
+            QStringLiteral("Root total usage comes from the / filesystem itself and excludes separately mounted /home and /data. The rows below are recognized child categories or key writable layers. Other root usage includes the system baseline, KARE base, ordinary app directories, logs, caches, and anything not broken out separately."),
             QStringLiteral("Overall Space Usage"),
             QStringLiteral("Recognized Items"),
             QStringLiteral("Stage"),
@@ -685,9 +1086,9 @@ private:
             QStringLiteral("Done"),
             QStringLiteral("Failed"),
             QStringLiteral("Plan"),
-            QStringLiteral("Manage preheat/autostart entries"),
+            QStringLiteral("Manage autostart entries"),
             QStringLiteral("Select old container versions to clean"),
-            QStringLiteral("No manageable preheat/autostart entries were found."),
+            QStringLiteral("No manageable autostart entries were found."),
             QStringLiteral("No safely cleanable old container versions were found."),
             QStringLiteral("Error"),
             QStringLiteral("Current Status"),
@@ -770,28 +1171,44 @@ private:
     {
         setObjectName(QStringLiteral("AppRoot"));
         auto *windowRoot = new QVBoxLayout(this);
-        windowRoot->setContentsMargins(14, 10, 14, 14);
-        windowRoot->setSpacing(12);
+        windowRoot->setContentsMargins(0, 0, 0, 0);
+        windowRoot->setSpacing(0);
+
+        appShell_ = new GlassShellFrame;
+        appShell_->setObjectName(QStringLiteral("AppShellCard"));
+        auto *shellRoot = new QVBoxLayout(appShell_);
+        shellRoot->setContentsMargins(0, 0, 0, 0);
+        shellRoot->setSpacing(0);
+        windowRoot->addWidget(appShell_, 1);
 
         chrome_ = new QFrame;
         chrome_->setObjectName(QStringLiteral("ChromeBar"));
+        chrome_->setFixedHeight(54);
         chrome_->installEventFilter(this);
         auto *chromeLayout = new QHBoxLayout(chrome_);
-        chromeLayout->setContentsMargins(8, 0, 8, 0);
-        chromeLayout->setSpacing(8);
+        chromeLayout->setContentsMargins(22, 8, 22, 8);
+        chromeLayout->setSpacing(10);
         chromeTitle_ = new QLabel;
         chromeTitle_->setObjectName(QStringLiteral("ChromeTitle"));
-        chromeLayout->addWidget(chromeTitle_, 1);
+        chromeTitle_->setAlignment(Qt::AlignCenter);
         minimizeButton_ = new AnimatedButton;
         maximizeButton_ = new AnimatedButton;
         closeButton_ = new AnimatedButton;
         minimizeButton_->setObjectName(QStringLiteral("ChromeButton"));
         maximizeButton_->setObjectName(QStringLiteral("ChromeButton"));
         closeButton_->setObjectName(QStringLiteral("CloseButton"));
-        minimizeButton_->setText(QStringLiteral("−"));
-        maximizeButton_->setText(QStringLiteral("□"));
-        closeButton_->setText(QStringLiteral("×"));
-        const QSize chromeButtonSize(32, 28);
+        minimizeButton_->setProperty("windowAction", QStringLiteral("minimize"));
+        maximizeButton_->setProperty("windowAction", QStringLiteral("maximize"));
+        closeButton_->setProperty("windowAction", QStringLiteral("close"));
+        minimizeButton_->setText(QString());
+        maximizeButton_->setText(QString());
+        closeButton_->setText(QString());
+        QFont chromeButtonFont = minimizeButton_->font();
+        chromeButtonFont.setBold(true);
+        minimizeButton_->setFont(chromeButtonFont);
+        maximizeButton_->setFont(chromeButtonFont);
+        closeButton_->setFont(chromeButtonFont);
+        const QSize chromeButtonSize(26, 22);
         minimizeButton_->setFixedSize(chromeButtonSize);
         maximizeButton_->setFixedSize(chromeButtonSize);
         closeButton_->setFixedSize(chromeButtonSize);
@@ -800,26 +1217,76 @@ private:
             isMaximized() ? showNormal() : showMaximized();
         });
         connect(closeButton_, &QPushButton::clicked, this, &QWidget::close);
-        chromeLayout->addWidget(minimizeButton_);
-        chromeLayout->addWidget(maximizeButton_);
-        chromeLayout->addWidget(closeButton_);
-        windowRoot->addWidget(chrome_);
+        auto *windowControlCard = new QFrame;
+        windowControlCard->setObjectName(QStringLiteral("WindowControlCard"));
+        windowControlCard->setFixedSize(100, 28);
+        auto *windowControlLayout = new QHBoxLayout(windowControlCard);
+        windowControlLayout->setContentsMargins(7, 0, 7, 6);
+        windowControlLayout->setSpacing(4);
+        windowControlLayout->addWidget(minimizeButton_, 0, Qt::AlignCenter);
+        windowControlLayout->addWidget(maximizeButton_, 0, Qt::AlignCenter);
+        windowControlLayout->addWidget(closeButton_, 0, Qt::AlignCenter);
+        auto *chromeBalance = new QWidget;
+        chromeBalance->setFixedWidth(112);
+        chromeLayout->addWidget(chromeBalance);
+        chromeLayout->addStretch(1);
+        chromeLayout->addWidget(chromeTitle_, 0, Qt::AlignCenter);
+        chromeLayout->addStretch(1);
+        chromeLayout->addWidget(windowControlCard, 0, Qt::AlignVCenter);
+        shellRoot->addWidget(chrome_);
 
         auto *content = new QWidget;
         content->setObjectName(QStringLiteral("ContentPane"));
-        auto *root = new QVBoxLayout(content);
+        auto *shell = new QHBoxLayout(content);
+        shell->setContentsMargins(14, 0, 14, 14);
+        shell->setSpacing(14);
+        shellRoot->addWidget(content, 1);
+
+        sideBar_ = new QFrame;
+        sideBar_->setObjectName(QStringLiteral("SideBar"));
+        sideBar_->setFixedWidth(96);
+        auto *navLayout = new QVBoxLayout(sideBar_);
+        navLayout->setContentsMargins(10, 18, 10, 18);
+        navLayout->setSpacing(14);
+        statusNavButton_ = new AnimatedButton;
+        appsNavButton_ = new AnimatedButton;
+        containersNavButton_ = new AnimatedButton;
+        autostartNavButton_ = new AnimatedButton;
+        const auto configureNavButton = [](QPushButton *button, const QString &kind) {
+            button->setObjectName(QStringLiteral("NavButton"));
+            button->setProperty("navKind", kind);
+            button->setProperty("navVisualOffset", -12.0);
+            button->setText(QString());
+            button->setFixedSize(64, 58);
+        };
+        configureNavButton(statusNavButton_, QStringLiteral("space"));
+        configureNavButton(appsNavButton_, QStringLiteral("apps"));
+        configureNavButton(containersNavButton_, QStringLiteral("container"));
+        configureNavButton(autostartNavButton_, QStringLiteral("autostart"));
+        statusNavButton_->setObjectName(QStringLiteral("NavSelected"));
+        navLayout->addStretch(1);
+        navLayout->addWidget(statusNavButton_, 0, Qt::AlignLeft);
+        navLayout->addWidget(appsNavButton_, 0, Qt::AlignLeft);
+        navLayout->addWidget(containersNavButton_, 0, Qt::AlignLeft);
+        navLayout->addWidget(autostartNavButton_, 0, Qt::AlignLeft);
+        navLayout->addStretch(1);
+        shell->addWidget(sideBar_);
+
+        auto *workspace = new QWidget;
+        workspace->setObjectName(QStringLiteral("Workspace"));
+        auto *root = new QVBoxLayout(workspace);
         root->setContentsMargins(0, 0, 0, 0);
         root->setSpacing(12);
-        windowRoot->addWidget(content, 1);
+        shell->addWidget(workspace, 1);
 
-        auto *headerFrame = new QFrame;
-        headerFrame->setObjectName(QStringLiteral("HeaderFrame"));
-        auto *header = new QVBoxLayout(headerFrame);
-        header->setContentsMargins(22, 14, 22, 14);
-        header->setSpacing(0);
+        topBarFrame_ = new QFrame;
+        topBarFrame_->setObjectName(QStringLiteral("TopBarFrame"));
+        auto *header = new QVBoxLayout(topBarFrame_);
+        header->setContentsMargins(18, 10, 18, 10);
+        header->setSpacing(8);
 
         auto *topBar = new QHBoxLayout;
-        topBar->setSpacing(10);
+        topBar->setSpacing(12);
         title_ = new QLabel;
         title_->setObjectName(QStringLiteral("Title"));
         title_->setWordWrap(true);
@@ -829,6 +1296,15 @@ private:
         titleFont.setBold(true);
         title_->setFont(titleFont);
         topBar->addWidget(title_, 1);
+        intro_ = new QLabel;
+        intro_->hide();
+        topScanButton_ = new AnimatedButton;
+        topScanButton_->setObjectName(QStringLiteral("HeaderScanButton"));
+        topScanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+        topScanButton_->setIconSize(QSize(20, 20));
+        topScanButton_->setMinimumSize(138, 44);
+        topScanButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        connect(topScanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
         languageLabel_ = new QLabel;
         language_ = new QComboBox;
         language_->addItem(QStringLiteral("中文"), QStringLiteral("zh"));
@@ -839,6 +1315,7 @@ private:
         userLabel_ = new QLabel;
         userValue_ = new QLabel(user_);
         userValue_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        topBar->addWidget(topScanButton_, 0, Qt::AlignVCenter);
         topBar->addWidget(languageLabel_);
         topBar->addWidget(language_);
         topBar->addSpacing(12);
@@ -846,89 +1323,33 @@ private:
         topBar->addWidget(userValue_);
         header->addLayout(topBar);
 
-        auto *body = new QHBoxLayout;
-        body->setSpacing(20);
-        auto *copy = new QVBoxLayout;
-        copy->setContentsMargins(0, 0, 0, 0);
-        copy->setSpacing(0);
-        intro_ = new QLabel;
-        intro_->setObjectName(QStringLiteral("Intro"));
-        intro_->setWordWrap(true);
-        intro_->setVisible(false);
-        copy->addWidget(intro_);
-
-        heroScanButton_ = new AnimatedButton;
-        heroScanButton_->setObjectName(QStringLiteral("PrimaryButton"));
-        heroScanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
-        heroScanButton_->setIconSize(QSize(18, 18));
-        heroScanButton_->setMinimumWidth(142);
-        heroScanButton_->setVisible(false);
-        connect(heroScanButton_, &QPushButton::clicked, this, [this]() {
-            if (tabs_) {
-                tabs_->setCurrentIndex(1);
-            }
-            scanManual();
-        });
-        copy->addWidget(heroScanButton_, 0, Qt::AlignLeft);
-
         auto *statusFrame = new QFrame;
         statusFrame->setObjectName(QStringLiteral("StatusFrame"));
-        auto *statusLayout = new QHBoxLayout(statusFrame);
-        statusLayout->setContentsMargins(14, 12, 14, 12);
-        statusLayout->setSpacing(12);
+        auto *statusLayout = new QVBoxLayout(statusFrame);
+        statusLayout->setContentsMargins(12, 8, 12, 8);
+        statusLayout->setSpacing(6);
+        auto *statusLine = new QHBoxLayout;
+        statusLine->setSpacing(8);
         statusTitle_ = new QLabel;
         statusTitle_->setObjectName(QStringLiteral("StatusTitle"));
         statusSummary_ = new QLabel;
         statusSummary_->setObjectName(QStringLiteral("StatusSummary"));
         statusSummary_->setWordWrap(true);
+        statusLine->addWidget(statusTitle_);
+        statusLine->addWidget(statusSummary_, 1);
         lastUpdate_ = new QLabel;
         lastUpdate_->setObjectName(QStringLiteral("LastUpdate"));
-        lastUpdate_->setMinimumWidth(128);
         progress_ = new QProgressBar;
         progress_->setObjectName(QStringLiteral("Progress"));
         progress_->setTextVisible(false);
-        progress_->setFixedWidth(140);
+        progress_->setMinimumWidth(260);
         progress_->setRange(0, 100);
         progress_->setValue(100);
-        statusLayout->addWidget(statusTitle_);
-        statusLayout->addWidget(statusSummary_, 1);
+        statusLayout->addLayout(statusLine);
         statusLayout->addWidget(lastUpdate_);
         statusLayout->addWidget(progress_);
-        statusFrame->setVisible(false);
-        copy->addWidget(statusFrame);
-        copy->addStretch(1);
-        auto *visualCard = new CardFrame;
-        visualCard->setObjectName(QStringLiteral("VisualCard"));
-        visualCard->setInteractive(false);
-        visualCard->setVisible(false);
-        auto *visualLayout = new QVBoxLayout(visualCard);
-        visualLayout->setContentsMargins(10, 10, 10, 10);
-        visual_ = new SpaceVisual;
-        visualLayout->addWidget(visual_);
-        body->addLayout(copy, 1);
-        body->addWidget(visualCard, 0, Qt::AlignRight | Qt::AlignVCenter);
-        header->addLayout(body);
-        root->addWidget(headerFrame);
-
-        auto *navFrame = new QFrame;
-        navFrame->setObjectName(QStringLiteral("NavFrame"));
-        auto *navLayout = new QHBoxLayout(navFrame);
-        navLayout->setContentsMargins(8, 8, 8, 8);
-        navLayout->setSpacing(10);
-        statusNavButton_ = new AnimatedButton;
-        scanNavButton_ = new AnimatedButton;
-        statusNavButton_->setObjectName(QStringLiteral("NavSelected"));
-        scanNavButton_->setObjectName(QStringLiteral("NavButton"));
-        statusNavButton_->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
-        scanNavButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
-        statusNavButton_->setIconSize(QSize(18, 18));
-        scanNavButton_->setIconSize(QSize(18, 18));
-        statusNavButton_->setMinimumWidth(152);
-        scanNavButton_->setMinimumWidth(152);
-        navLayout->addWidget(statusNavButton_);
-        navLayout->addWidget(scanNavButton_);
-        navLayout->addStretch(1);
-        root->addWidget(navFrame);
+        header->addWidget(statusFrame);
+        root->addWidget(topBarFrame_);
 
         tabs_ = new QTabWidget;
         tabs_->setObjectName(QStringLiteral("MainTabs"));
@@ -936,14 +1357,52 @@ private:
         tabs_->setIconSize(QSize(18, 18));
         tabs_->tabBar()->hide();
         connect(statusNavButton_, &QPushButton::clicked, this, [this]() {
+            activeNavIndex_ = 0;
+            primeTheme(0);
             if (tabs_) {
+                QSignalBlocker blocker(tabs_);
                 tabs_->setCurrentIndex(0);
             }
+            showStatusSubPage(0);
         });
-        connect(scanNavButton_, &QPushButton::clicked, this, [this]() {
+        connect(appsNavButton_, &QPushButton::clicked, this, [this]() {
+            activeNavIndex_ = 1;
+            primeTheme(1);
             if (tabs_) {
+                QSignalBlocker blocker(tabs_);
+                tabs_->setCurrentIndex(0);
+            }
+            showStatusSubPage(1);
+        });
+        connect(containersNavButton_, &QPushButton::clicked, this, [this]() {
+            activeNavIndex_ = 2;
+            primeTheme(2);
+            if (tabs_) {
+                QSignalBlocker blocker(tabs_);
                 tabs_->setCurrentIndex(1);
             }
+            activeReviewFilter_ = 1;
+            if (state_.isEmpty()) {
+                scanManual();
+            } else {
+                showScanResults(1);
+            }
+            updateMainNav(tabs_ ? tabs_->currentIndex() : 1);
+        });
+        connect(autostartNavButton_, &QPushButton::clicked, this, [this]() {
+            activeNavIndex_ = 3;
+            primeTheme(2);
+            if (tabs_) {
+                QSignalBlocker blocker(tabs_);
+                tabs_->setCurrentIndex(1);
+            }
+            activeReviewFilter_ = 2;
+            if (state_.isEmpty()) {
+                scanManual();
+            } else {
+                showScanResults(2);
+            }
+            updateMainNav(tabs_ ? tabs_->currentIndex() : 1);
         });
         connect(tabs_, &QTabWidget::currentChanged, this, &CleanerWindow::updateMainNav);
 
@@ -964,7 +1423,15 @@ private:
         statusSwitcher->addWidget(metricsPageButton_);
         statusSwitcher->addWidget(appsPageButton_);
         statusSwitcher->addStretch(1);
-        statusPageLayout->addLayout(statusSwitcher);
+        auto *moduleSwitchFrame = new CardFrame;
+        moduleSwitchFrame->setObjectName(QStringLiteral("SmartSummaryCard"));
+        moduleSwitchFrame->setInteractive(false);
+        auto *moduleSwitchLayout = new QHBoxLayout(moduleSwitchFrame);
+        moduleSwitchLayout->setContentsMargins(14, 10, 14, 10);
+        moduleSwitchLayout->setSpacing(10);
+        moduleSwitchLayout->addLayout(statusSwitcher);
+        statusPageLayout->addWidget(moduleSwitchFrame);
+        moduleSwitchFrame->hide();
 
         statusStack_ = new QStackedWidget;
         statusStack_->setObjectName(QStringLiteral("StatusStack"));
@@ -982,8 +1449,15 @@ private:
         appsPageLayout->setContentsMargins(0, 0, 0, 0);
         appsPageLayout->setSpacing(12);
 
+        auto *rootDetailsPage = new QWidget;
+        rootDetailsPage->setObjectName(QStringLiteral("TabPage"));
+        auto *rootDetailsLayout = new QVBoxLayout(rootDetailsPage);
+        rootDetailsLayout->setContentsMargins(0, 0, 0, 0);
+        rootDetailsLayout->setSpacing(12);
+
         statusStack_->addWidget(metricsPage);
         statusStack_->addWidget(appsPage);
+        statusStack_->addWidget(rootDetailsPage);
         connect(metricsPageButton_, &QPushButton::clicked, this, [this]() {
             showStatusSubPage(0);
         });
@@ -1000,19 +1474,36 @@ private:
         tabs_->addTab(statusPage, style()->standardIcon(QStyle::SP_ComputerIcon), QString());
         tabs_->addTab(scanPage, style()->standardIcon(QStyle::SP_BrowserReload), QString());
         tabs_->setCurrentIndex(0);
-        root->addWidget(tabs_);
+        auto *contentLayer = new QFrame;
+        contentLayer->setObjectName(QStringLiteral("ContentLayer"));
+        auto *contentLayerLayout = new QGridLayout(contentLayer);
+        contentLayerLayout->setContentsMargins(0, 0, 0, 0);
+        contentLayerLayout->setSpacing(0);
+        contentLayerLayout->addWidget(tabs_, 0, 0);
+        busyOverlay_ = new QFrame;
+        busyOverlay_->setObjectName(QStringLiteral("BusyOverlay"));
+        busyOverlay_->hide();
+        auto *busyOverlayLayout = new QVBoxLayout(busyOverlay_);
+        busyOverlayLayout->setContentsMargins(0, 0, 0, 0);
+        busyOverlayLayout->addStretch(1);
+        contentLayerLayout->addWidget(busyOverlay_, 0, 0);
+        root->addWidget(contentLayer, 1);
 
         auto *overallCard = new CardFrame;
-        overallCard->setObjectName(QStringLiteral("CardFrame"));
+        overallCard->setObjectName(QStringLiteral("RootOverviewCard"));
         overallCard->setInteractive(false);
         auto *overallLayout = new QVBoxLayout(overallCard);
-        overallLayout->setContentsMargins(16, 16, 16, 16);
-        overallLayout->setSpacing(10);
+        overallLayout->setContentsMargins(0, 0, 0, 0);
+        overallLayout->setSpacing(0);
         overallTitle_ = new QLabel(overallCard);
         overallTitle_->setObjectName(QStringLiteral("SectionTitle"));
         overallTitle_->hide();
-        auto *overallScroll = createCardList(&overallRows_, 92);
-        overallScroll->setMaximumHeight(108);
+        auto *overallScroll = createCardList(&overallRows_, 64);
+        overallRows_->setContentsMargins(0, 0, 0, 0);
+        overallRows_->setSpacing(0);
+        overallScroll->setMaximumHeight(72);
+        overallScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        overallScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         overallLayout->addWidget(overallScroll);
         metricsPageLayout->addWidget(overallCard);
 
@@ -1033,27 +1524,71 @@ private:
         metricsSeries_->setHoleSize(0.52);
         metricsSeries_->setPieSize(0.82);
         metricsChart_ = new QChart;
-        metricsChart_->setTheme(QChart::ChartThemeLight);
+        metricsChart_->setTheme(QChart::ChartThemeDark);
         metricsChart_->addSeries(metricsSeries_);
         metricsChart_->legend()->setVisible(true);
         metricsChart_->legend()->setAlignment(Qt::AlignRight);
+        metricsChart_->legend()->setLabelColor(QColor(246, 239, 255));
         metricsChart_->setBackgroundVisible(true);
-        metricsChart_->setBackgroundBrush(QBrush(QColor(251, 252, 253)));
+        metricsChart_->setBackgroundBrush(QBrush(Qt::transparent));
         metricsChart_->setPlotAreaBackgroundVisible(false);
+        metricsChart_->setPlotAreaBackgroundBrush(QBrush(Qt::transparent));
         metricsChart_->setBackgroundRoundness(0);
         metricsChart_->setMargins(QMargins(0, 0, 0, 0));
         metricsChartView_ = new QChartView(metricsChart_);
         metricsChartView_->setObjectName(QStringLiteral("MetricChart"));
         metricsChartView_->setAutoFillBackground(false);
+        metricsChartView_->setAttribute(Qt::WA_TranslucentBackground, true);
+        metricsChartView_->viewport()->setAutoFillBackground(false);
+        metricsChartView_->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
         metricsChartView_->setRenderHint(QPainter::Antialiasing);
-        metricsChartView_->setMinimumHeight(210);
-        metricsChartView_->setMaximumHeight(230);
+        metricsChartView_->setMinimumHeight(250);
+        metricsChartView_->setMaximumHeight(270);
         metricsLayout->addWidget(metricsChartView_);
-        auto *metricsScroll = createCardList(&metricsRows_, 230);
+        metricsLayout->addSpacing(18);
+        rootDetailsButton_ = new AnimatedButton;
+        rootDetailsButton_->setObjectName(QStringLiteral("ActionButton"));
+        rootDetailsButton_->setMinimumHeight(58);
+        rootDetailsButton_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        rootDetailsButton_->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+        rootDetailsButton_->setIconSize(QSize(18, 18));
+        metricsLayout->addWidget(rootDetailsButton_, 1);
+        metricsPageLayout->addWidget(metricsCard, 1);
+        connect(rootDetailsButton_, &QPushButton::clicked, this, [this]() {
+            if (!statusStack_) {
+                return;
+            }
+            activeNavIndex_ = 0;
+            statusStack_->setCurrentIndex(2);
+            updateMainNav(tabs_ ? tabs_->currentIndex() : 0);
+        });
+
+        auto *rootDetailsHeader = new QHBoxLayout;
+        rootDetailsHeader->setContentsMargins(0, 0, 0, 0);
+        rootDetailsHeader->setSpacing(10);
+        rootDetailsBackButton_ = new AnimatedButton;
+        rootDetailsBackButton_->setObjectName(QStringLiteral("ActionButton"));
+        rootDetailsBackButton_->setMinimumHeight(36);
+        rootDetailsBackButton_->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
+        rootDetailsBackButton_->setIconSize(QSize(18, 18));
+        rootDetailsHeader->addWidget(rootDetailsBackButton_, 0, Qt::AlignLeft);
+        rootDetailsTitle_ = new QLabel;
+        rootDetailsTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        rootDetailsHeader->addWidget(rootDetailsTitle_, 1);
+        rootDetailsLayout->addLayout(rootDetailsHeader);
+        auto *rootDetailsCard = new CardFrame;
+        rootDetailsCard->setObjectName(QStringLiteral("CardFrame"));
+        rootDetailsCard->setInteractive(false);
+        auto *rootDetailsCardLayout = new QVBoxLayout(rootDetailsCard);
+        rootDetailsCardLayout->setContentsMargins(16, 14, 16, 16);
+        rootDetailsCardLayout->setSpacing(10);
+        auto *metricsScroll = createCardList(&metricsRows_, 520);
         metricsList_ = metricsScroll->widget();
-        metricsLayout->addWidget(metricsScroll);
-        metricsPageLayout->addWidget(metricsCard);
-        metricsPageLayout->addStretch(1);
+        rootDetailsCardLayout->addWidget(metricsScroll);
+        rootDetailsLayout->addWidget(rootDetailsCard, 1);
+        connect(rootDetailsBackButton_, &QPushButton::clicked, this, [this]() {
+            showStatusSubPage(0);
+        });
 
         appsStack_ = new QStackedWidget;
         appsStack_->setObjectName(QStringLiteral("AppsStack"));
@@ -1133,20 +1668,65 @@ private:
         scanLaunchLayout->setSpacing(12);
 
         auto *actionsCard = new CardFrame;
-        actionsCard->setObjectName(QStringLiteral("HeroActionCard"));
+        actionsCard->setObjectName(QStringLiteral("SmartCarePanel"));
         actionsCard->setInteractive(false);
+        actionsCard->setMinimumHeight(620);
         auto *actionsCardLayout = new QVBoxLayout(actionsCard);
-        actionsCardLayout->setContentsMargins(20, 18, 20, 18);
-        actionsCardLayout->setSpacing(14);
+        actionsCardLayout->setContentsMargins(34, 28, 34, 28);
+        actionsCardLayout->setSpacing(18);
         actionsTitle_ = new QLabel;
-        actionsTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        actionsTitle_->setObjectName(QStringLiteral("SmartCareTitle"));
+        actionsTitle_->setAlignment(Qt::AlignCenter);
         actionsCardLayout->addWidget(actionsTitle_);
+        auto *launchVisual = new SpaceVisual;
+        actionsCardLayout->addWidget(launchVisual, 0, Qt::AlignHCenter);
+        auto makeSmartTask = [this](const QString &title, const QString &detail) {
+            auto *tile = new CardFrame;
+            tile->setObjectName(QStringLiteral("SmartTaskCard"));
+            tile->setMinimumSize(210, 118);
+            tile->setInteractive(true);
+            auto *tileLayout = new QVBoxLayout(tile);
+            tileLayout->setContentsMargins(14, 12, 14, 12);
+            tileLayout->setSpacing(8);
+            auto *top = new QHBoxLayout;
+            top->setSpacing(8);
+            auto *mark = new QLabel(QStringLiteral("✓"));
+            mark->setObjectName(QStringLiteral("TaskMark"));
+            mark->setAlignment(Qt::AlignCenter);
+            mark->setFixedSize(22, 22);
+            top->addWidget(mark);
+            auto *titleLabel = makeLabel(title, QStringLiteral("RowTitle"));
+            top->addWidget(titleLabel, 1);
+            tileLayout->addLayout(top);
+            auto *detailLabel = makeLabel(detail, QStringLiteral("PathValue"));
+            detailLabel->setWordWrap(true);
+            tileLayout->addWidget(detailLabel);
+            tileLayout->addStretch(1);
+            return tile;
+        };
+        auto *taskGrid = new QGridLayout;
+        taskGrid->setContentsMargins(0, 0, 0, 0);
+        taskGrid->setHorizontalSpacing(12);
+        taskGrid->setVerticalSpacing(12);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("Kaiming 旧版本容器"),
+                                          QStringLiteral("选择可安全回收的旧层版本")), 0, 0);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("自启动项"),
+                                          QStringLiteral("逐项关闭可优化的启动项")), 0, 1);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("应用容器占用"),
+                                          QStringLiteral("查看每个应用的容器体积")), 0, 2);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("根分区空间"),
+                                          QStringLiteral("保持清理前后的空间对照")), 1, 0);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("执行计划"),
+                                          QStringLiteral("确认后再移动到回滚隔离区")), 1, 1);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("结果记录"),
+                                          QStringLiteral("每个步骤都有状态与错误详情")), 1, 2);
+        actionsCardLayout->addLayout(taskGrid);
         scanButton_ = new AnimatedButton;
-        scanButton_->setObjectName(QStringLiteral("PrimaryButton"));
+        scanButton_->setObjectName(QStringLiteral("OrbButton"));
         scanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
-        scanButton_->setIconSize(QSize(18, 18));
-        scanButton_->setMinimumWidth(168);
-        actionsCardLayout->addWidget(scanButton_, 0, Qt::AlignLeft);
+        scanButton_->setIconSize(QSize(22, 22));
+        scanButton_->setFixedSize(132, 132);
+        actionsCardLayout->addWidget(scanButton_, 0, Qt::AlignHCenter);
         scanLaunchLayout->addWidget(actionsCard);
         scanLaunchLayout->addStretch(1);
         connect(scanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
@@ -1157,16 +1737,20 @@ private:
         scanProgressLayout->setContentsMargins(0, 0, 0, 0);
         scanProgressLayout->setSpacing(12);
         auto *progressCard = new CardFrame;
-        progressCard->setObjectName(QStringLiteral("HeroActionCard"));
+        progressCard->setObjectName(QStringLiteral("SmartCarePanel"));
         progressCard->setInteractive(false);
         auto *progressLayout = new QVBoxLayout(progressCard);
-        progressLayout->setContentsMargins(20, 18, 20, 18);
-        progressLayout->setSpacing(14);
+        progressLayout->setContentsMargins(34, 30, 34, 30);
+        progressLayout->setSpacing(16);
+        visual_ = new SpaceVisual;
+        progressLayout->addWidget(visual_, 0, Qt::AlignHCenter);
         scanProgressTitle_ = new QLabel;
-        scanProgressTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        scanProgressTitle_->setObjectName(QStringLiteral("SmartCareTitle"));
+        scanProgressTitle_->setAlignment(Qt::AlignCenter);
         scanProgressDetail_ = new QLabel;
         scanProgressDetail_->setObjectName(QStringLiteral("Intro"));
         scanProgressDetail_->setWordWrap(true);
+        scanProgressDetail_->setAlignment(Qt::AlignCenter);
         scanFlowProgress_ = new QProgressBar;
         scanFlowProgress_->setObjectName(QStringLiteral("FlowProgress"));
         scanFlowProgress_->setRange(0, 100);
@@ -1183,22 +1767,48 @@ private:
         scanResultLayout->setContentsMargins(0, 0, 0, 0);
         scanResultLayout->setSpacing(12);
         auto *resultCard = new CardFrame;
-        resultCard->setObjectName(QStringLiteral("CardFrame"));
+        resultCard->setObjectName(QStringLiteral("SmartCarePanel"));
         resultCard->setInteractive(false);
         auto *resultLayout = new QVBoxLayout(resultCard);
-        resultLayout->setContentsMargins(16, 14, 16, 16);
-        resultLayout->setSpacing(10);
+        resultLayout->setContentsMargins(24, 22, 24, 24);
+        resultLayout->setSpacing(14);
         resultTitle_ = new QLabel;
-        resultTitle_->setObjectName(QStringLiteral("SectionTitle"));
+        resultTitle_->setObjectName(QStringLiteral("SmartCareTitle"));
+        resultTitle_->setAlignment(Qt::AlignCenter);
+        resultLayout->addWidget(resultTitle_);
+
+        auto *resultContent = new QHBoxLayout;
+        resultContent->setSpacing(12);
+
+        auto *summaryCard = new CardFrame;
+        summaryCard->setObjectName(QStringLiteral("SmartSummaryCard"));
+        summaryCard->setInteractive(false);
+        summaryCard->setMinimumWidth(300);
+        summaryCard->setMaximumWidth(360);
+        resultSummaryCard_ = summaryCard;
+        auto *summaryLayout = new QVBoxLayout(summaryCard);
+        summaryLayout->setContentsMargins(16, 14, 16, 16);
+        summaryLayout->setSpacing(10);
         resultSummary_ = new QLabel;
         resultSummary_->setObjectName(QStringLiteral("Intro"));
         resultSummary_->setWordWrap(true);
-        resultLayout->addWidget(resultTitle_);
-        resultLayout->addWidget(resultSummary_);
-        auto *optimizationScroll = createCardList(&optimizationRows_, 330);
-        optimizationList_ = optimizationScroll->widget();
-        resultLayout->addWidget(optimizationScroll, 1);
-        auto *resultActions = new QHBoxLayout;
+        summaryLayout->addWidget(resultSummary_);
+        selectionSummary_ = new QLabel;
+        selectionSummary_->setObjectName(QStringLiteral("Intro"));
+        selectionSummary_->setWordWrap(true);
+        summaryLayout->addWidget(selectionSummary_);
+        auto *selectionButtons = new QHBoxLayout;
+        selectionButtons->setSpacing(8);
+        selectAllButton_ = new QPushButton;
+        clearSelectionButton_ = new QPushButton;
+        selectAllButton_->setObjectName(QStringLiteral("TaskDetailButton"));
+        clearSelectionButton_->setObjectName(QStringLiteral("TaskDetailButton"));
+        selectAllButton_->setCursor(Qt::PointingHandCursor);
+        clearSelectionButton_->setCursor(Qt::PointingHandCursor);
+        selectionButtons->addWidget(selectAllButton_);
+        selectionButtons->addWidget(clearSelectionButton_);
+        summaryLayout->addLayout(selectionButtons);
+        auto *resultActions = new QVBoxLayout;
         resultActions->setSpacing(10);
         applyOptimizationsButton_ = new AnimatedButton;
         rescanButton_ = new AnimatedButton;
@@ -1208,34 +1818,84 @@ private:
         rescanButton_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
         applyOptimizationsButton_->setIconSize(QSize(18, 18));
         rescanButton_->setIconSize(QSize(18, 18));
+        applyOptimizationsButton_->setMinimumHeight(36);
+        rescanButton_->setMinimumHeight(36);
         resultActions->addWidget(applyOptimizationsButton_);
         resultActions->addWidget(rescanButton_);
-        resultActions->addStretch(1);
-        resultLayout->addLayout(resultActions);
+        summaryLayout->addLayout(resultActions);
+        summaryLayout->addStretch(1);
+        resultContent->addWidget(summaryCard);
+
+        auto *optimizationScroll = createCardList(&optimizationRows_, 330);
+        optimizationScroll->setMinimumHeight(430);
+        optimizationScrollArea_ = optimizationScroll;
+        optimizationList_ = optimizationScroll->widget();
+        resultContent->addWidget(optimizationScroll, 1);
+        resultLayout->addLayout(resultContent, 1);
         scanResultLayout->addWidget(resultCard, 1);
         connect(applyOptimizationsButton_, &QPushButton::clicked, this, &CleanerWindow::applySelectedOptimizations);
         connect(rescanButton_, &QPushButton::clicked, this, &CleanerWindow::scanManual);
+        connect(selectAllButton_, &QPushButton::clicked, this, &CleanerWindow::selectAllOptimizations);
+        connect(clearSelectionButton_, &QPushButton::clicked, this, &CleanerWindow::clearOptimizationSelection);
+
+        auto *actionResultPage = new QWidget;
+        actionResultPage->setObjectName(QStringLiteral("TabPage"));
+        auto *actionResultLayout = new QVBoxLayout(actionResultPage);
+        actionResultLayout->setContentsMargins(0, 0, 0, 0);
+        actionResultLayout->setSpacing(12);
+
+        auto *actionResultHeader = new CardFrame;
+        actionResultHeader->setObjectName(QStringLiteral("SmartSummaryCard"));
+        actionResultHeader->setInteractive(false);
+        auto *actionResultHeaderLayout = new QHBoxLayout(actionResultHeader);
+        actionResultHeaderLayout->setContentsMargins(16, 12, 16, 12);
+        actionResultHeaderLayout->setSpacing(12);
+        auto *actionResultHint = makeLabel(language_->currentData().toString() == QStringLiteral("en")
+                                               ? QStringLiteral("Review the latest operation results here, then return to the optimization page.")
+                                               : QStringLiteral("在这里查看本次操作结果，然后返回优化页面。"),
+                                           QStringLiteral("PathValue"));
+        actionResultHint->setWordWrap(true);
+        actionResultHeaderLayout->addWidget(actionResultHint, 1);
+        auto *backFromActionResultButton = new QPushButton;
+        backFromActionResultButton->setObjectName(QStringLiteral("TaskDetailButton"));
+        backFromActionResultButton->setCursor(Qt::PointingHandCursor);
+        backFromActionResultButton->setText(language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Back")
+            : QStringLiteral("返回"));
+        backFromActionResultButton->setFixedWidth(118);
+        actionResultHeaderLayout->addWidget(backFromActionResultButton);
+        actionResultLayout->addWidget(actionResultHeader);
+        connect(backFromActionResultButton, &QPushButton::clicked, this, [this]() {
+            showScanResults(activeReviewFilter_);
+        });
 
         auto *planCard = new CardFrame;
         planCard->setObjectName(QStringLiteral("CardFrame"));
         planCard->setInteractive(false);
+        planCard_ = planCard;
         auto *planLayout = new QVBoxLayout(planCard);
         planLayout->setContentsMargins(16, 14, 16, 16);
         planLayout->setSpacing(10);
         planTitle_ = new QLabel;
         planTitle_->setObjectName(QStringLiteral("SectionTitle"));
         planLayout->addWidget(planTitle_);
-        auto *planScroll = createCardList(&planRows_, 260);
+        auto *planScroll = createCardList(&planRows_, 120);
         planList_ = planScroll->widget();
         planLayout->addWidget(planScroll, 1);
-        scanResultLayout->addWidget(planCard);
+        actionResultLayout->addWidget(planCard, 1);
 
         scanStack_->addWidget(scanLaunchPage);
         scanStack_->addWidget(scanProgressPage);
         scanStack_->addWidget(scanResultPage);
+        scanStack_->addWidget(actionResultPage);
 
         setStyleSheet(QStringLiteral(R"(
-            QWidget#AppRoot { background: #f5f7fa; color: #1d1d1f; }
+            QWidget#AppRoot { background: transparent; color: #f8f4ff; }
+            QFrame#AppShellCard {
+                border-radius: 8px;
+                border: 0;
+                background: transparent;
+            }
             QWidget#ContentPane { background: transparent; }
             QScrollArea#ContentScroll {
                 border: 0;
@@ -1276,90 +1936,150 @@ private:
                 background: #f2f5f8;
                 border-color: #aebaca;
             }
-            QFrame#ChromeBar { background: transparent; }
-            QLabel#ChromeTitle { color: #555b64; font-weight: 600; }
-            QFrame#HeaderFrame {
+            QFrame#ChromeBar { background: transparent; min-height: 42px; }
+            QLabel#ChromeTitle { color: #eadcff; font-weight: 800; font-size: 15px; }
+            QFrame#WindowControlCard {
                 border-radius: 8px;
-                border: 1px solid #d9dfe7;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #ffffff, stop:0.56 #f5f7fa, stop:1 #edf2f7);
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                background: rgba(255, 255, 255, 0.08);
             }
-            QLabel#Title { color: #1d1d1f; letter-spacing: 0px; }
-            QFrame#HeaderFrame QLabel { color: #3a3d42; }
-            QLabel#Intro { color: #63666d; font-size: 14px; line-height: 150%; }
-            QFrame#HeroActionCard {
+            QFrame#SideBar {
                 border-radius: 8px;
-                border: 1px solid #d9dfe7;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #ffffff, stop:0.62 #f8fafc, stop:1 #eef3f7);
+                border: 1px solid rgba(255, 255, 255, 0.10);
+                background: rgba(20, 4, 72, 0.34);
             }
+            QLabel#SideBrand {
+                border-radius: 8px;
+                color: #ffffff;
+                background: qradialgradient(cx:0.42, cy:0.32, radius:0.72,
+                    stop:0 #ff6ff2, stop:0.52 #b332e6, stop:1 #3a158b);
+                font-weight: 900;
+                font-size: 22px;
+            }
+            QWidget#Workspace { background: transparent; }
+            QFrame#ContentLayer { background: transparent; }
+            QFrame#BusyOverlay {
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.32);
+            }
+            QFrame#TopBarFrame {
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                background: rgba(255, 255, 255, 0.08);
+            }
+            QLabel#Title { color: #ffffff; letter-spacing: 0px; }
+            QFrame#TopBarFrame QLabel { color: #f7edff; }
+            QLabel#Intro { color: #d6c9e8; font-size: 14px; line-height: 150%; }
             QFrame#StatusFrame {
-                border: 1px solid #d9dfe7;
+                border: 1px solid rgba(255, 255, 255, 0.16);
                 border-radius: 8px;
-                background: #ffffff;
-                color: #1d1d1f;
+                background: rgba(255, 255, 255, 0.08);
+                color: #ffffff;
             }
-            QLabel#StatusTitle { color: #1d1d1f; font-weight: 700; }
-            QLabel#StatusSummary { color: #24262b; font-weight: 600; }
-            QLabel#LastUpdate { color: #737780; }
+            QLabel#StatusTitle { color: #ffffff; font-weight: 700; }
+            QLabel#StatusSummary { color: #f7edff; font-weight: 600; }
+            QLabel#LastUpdate { color: #d6c9e8; }
             QFrame#NavFrame {
-                border: 1px solid #d9dfe7;
+                border: 1px solid rgba(199, 113, 255, 0.36);
                 border-radius: 8px;
-                background: rgba(255, 255, 255, 214);
+                background: rgba(255, 255, 255, 0.08);
             }
             QLabel#SectionTitle {
-                color: #1d1d1f;
+                color: #ffffff;
                 font-size: 15px;
                 font-weight: 700;
             }
+            QLabel#SmartCareTitle {
+                color: #ffffff;
+                font-size: 28px;
+                font-weight: 900;
+            }
             QLabel#RowTitle {
-                color: #1d1d1f;
+                color: #ffffff;
                 font-size: 15px;
                 font-weight: 800;
             }
-            QFrame#ValuePill {
-                border: 1px solid #e1e6ed;
+            QFrame#InfoRow QLabel#RowTitle,
+            QFrame#SmartTaskCard QLabel#RowTitle,
+            QFrame#SmartSummaryCard QLabel#RowTitle,
+            QFrame#OptimizationTaskRow QLabel#RowTitle,
+            QFrame#AutostartActionRow QLabel#RowTitle,
+            QFrame#ContainerRow QLabel#RowTitle {
+                color: #ffffff;
+            }
+            QLabel#TaskMark {
                 border-radius: 8px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #ffffff, stop:1 #f4f7fa);
+                background: #24e6b8;
+                color: #102237;
+                font-weight: 900;
+            }
+            QFrame#SmartTaskCard QLabel#PathValue,
+            QFrame#InfoRow QLabel#PathValue,
+            QFrame#SmartSummaryCard QLabel#PathValue {
+                color: #d8c9ea;
+            }
+            QFrame#SmartSummaryCard QLabel#Intro,
+            QFrame#OptimizationTaskRow QLabel#PathValue,
+            QFrame#OptimizationTaskRow QLabel#PillLabel,
+            QFrame#OptimizationTaskRow QLabel#PillValue,
+            QFrame#AutostartActionRow QLabel#PillLabel,
+            QFrame#AutostartActionRow QLabel#PillValue {
+                color: #f7edff;
+            }
+            QFrame#OptimizationTaskRow QLabel#PathValue {
+                color: #d8c9ea;
+            }
+            QFrame#ValuePill {
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: 8px;
+                background: rgba(255, 255, 255, 0.10);
             }
             QLabel#PillLabel {
-                color: #727782;
+                color: #cfc0ea;
                 font-size: 11px;
                 font-weight: 700;
             }
             QLabel#PillValue {
-                color: #20242a;
+                color: #ffffff;
                 font-size: 14px;
                 font-weight: 800;
             }
             QFrame#PathPill {
-                border: 1px solid #e1e6ed;
+                border: 1px solid rgba(255, 255, 255, 0.16);
                 border-radius: 8px;
-                background: #fbfcfd;
+                background: rgba(255, 255, 255, 0.08);
             }
             QLabel#PathValue {
-                color: #2b3037;
+                color: #d8c9ea;
                 font-size: 12px;
                 font-weight: 650;
                 line-height: 140%;
             }
             QProgressBar#Progress {
-                border: 1px solid #cbd3dd;
+                border: 1px solid rgba(255, 255, 255, 0.18);
                 border-radius: 6px;
-                background: #eef2f6;
+                background: rgba(255, 255, 255, 0.12);
                 min-height: 10px;
                 max-height: 10px;
             }
             QProgressBar#Progress::chunk {
                 border-radius: 6px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #1d1d1f, stop:1 #66798b);
+                    stop:0 #df35ff, stop:1 #42ebd5);
+            }
+            QProgressBar#Progress[busy="true"] {
+                border: 1px solid rgba(255, 255, 255, 0.42);
+                background: rgba(255, 255, 255, 0.18);
+            }
+            QProgressBar#Progress[busy="true"]::chunk {
+                border-radius: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #ff7af5, stop:0.46 #df35ff, stop:1 #42fff0);
             }
             QProgressBar#FlowProgress {
-                border: 1px solid #cbd3dd;
+                border: 1px solid rgba(255, 255, 255, 0.18);
                 border-radius: 8px;
-                background: #eef2f6;
+                background: rgba(255, 255, 255, 0.12);
                 min-height: 16px;
                 max-height: 16px;
                 text-align: center;
@@ -1368,68 +2088,108 @@ private:
             QProgressBar#FlowProgress::chunk {
                 border-radius: 8px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #1d1d1f, stop:0.48 #596572, stop:1 #9aa7b3);
+                    stop:0 #df35ff, stop:0.48 #a936ee, stop:1 #42ebd5);
             }
             QChartView#MetricChart {
-                border: 1px solid #e1e6ed;
+                border: 0;
                 border-radius: 8px;
-                background: #fbfcfd;
+                background: transparent;
             }
             QFrame#MetricRail {
                 background: transparent;
             }
             QFrame#MetricRailLine {
-                background: #c8d0d9;
+                background: rgba(255, 255, 255, 0.22);
                 border-radius: 1px;
             }
             QProgressBar#TotalMetricBar,
             QProgressBar#ChildMetricBar {
                 border: 0;
                 border-radius: 4px;
-                background: #e9eef3;
+                background: rgba(255, 255, 255, 0.12);
                 min-height: 8px;
                 max-height: 8px;
             }
             QProgressBar#TotalMetricBar::chunk {
                 border-radius: 4px;
-                background: #1d1d1f;
+                background: #df35ff;
             }
             QProgressBar#ChildMetricBar::chunk {
                 border-radius: 4px;
-                background: #697684;
+                background: #42ebd5;
             }
             QCheckBox {
-                color: #1d1d1f;
+                color: #ffffff;
                 font-weight: 750;
                 spacing: 10px;
+            }
+            QFrame#OptimizationTaskRow QCheckBox,
+            QFrame#SmartSummaryCard QCheckBox {
+                color: #ffffff;
             }
             QCheckBox::indicator {
                 width: 18px;
                 height: 18px;
                 border-radius: 5px;
-                border: 1px solid #aebaca;
-                background: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.30);
+                background: rgba(255, 255, 255, 0.12);
             }
             QCheckBox::indicator:checked {
-                background: #1d1d1f;
-                border-color: #1d1d1f;
+                background: #42ebd5;
+                border-color: #42ebd5;
             }
             QCheckBox::indicator:disabled {
                 background: #eef2f6;
                 border-color: #d9dfe7;
             }
+            QCheckBox#TaskCheckBox {
+                font-size: 14px;
+                font-weight: 800;
+            }
+            QPushButton#TaskDetailButton {
+                min-height: 30px;
+                padding: 0 12px;
+                border-radius: 7px;
+                border: 1px solid rgba(255, 255, 255, 0.26);
+                background: rgba(255, 255, 255, 0.16);
+                color: #ffffff;
+                font-weight: 700;
+            }
+            QPushButton#TaskDetailButton:hover {
+                background: rgba(255, 255, 255, 0.24);
+                border-color: rgba(255, 255, 255, 0.46);
+            }
+            QMenu {
+                border: 1px solid #cbd3dd;
+                border-radius: 8px;
+                background: #ffffff;
+                color: #1d1d1f;
+                padding: 6px;
+            }
+            QMenu::item {
+                min-height: 28px;
+                padding: 4px 22px 4px 10px;
+                border-radius: 6px;
+            }
+            QMenu::item:selected {
+                background: #e8eef5;
+                color: #1d1d1f;
+            }
+            QMenu::item:disabled {
+                color: #a4a9b1;
+            }
             QComboBox {
                 min-height: 34px;
                 padding: 0 30px 0 12px;
                 border-radius: 7px;
-                border: 1px solid #cbd3dd;
-                background: #ffffff;
-                color: #1d1d1f;
+                border: 1px solid rgba(255, 255, 255, 0.20);
+                background: rgba(255, 255, 255, 0.12);
+                color: #ffffff;
                 font-weight: 600;
             }
             QComboBox:hover {
-                border-color: #9fb0c2;
-                background: #f7f9fb;
+                border-color: rgba(255, 255, 255, 0.34);
+                background: rgba(255, 255, 255, 0.18);
             }
             QComboBox::drop-down {
                 width: 26px;
@@ -1447,43 +2207,65 @@ private:
             }
             QComboBox QAbstractItemView {
                 border: 1px solid #cbd3dd;
-                background: #ffffff;
-                color: #1d1d1f;
-                selection-background-color: #dce5ee;
-                selection-color: #1d1d1f;
+                background: #1b064d;
+                color: #ffffff;
+                selection-background-color: #b328e0;
+                selection-color: #ffffff;
                 outline: 0;
             }
             QPushButton {
                 min-height: 34px;
                 padding: 0 16px;
                 border-radius: 7px;
-                border: 1px solid #cbd3dd;
-                background: #ffffff;
-                color: #1d1d1f;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                background: rgba(255, 255, 255, 0.12);
+                color: #ffffff;
                 font-weight: 600;
             }
-            QPushButton:hover { background: #f1f5f9; border-color: #9fb0c2; }
-            QPushButton:pressed { background: #e3eaf2; }
+            QPushButton:hover { background: rgba(255, 255, 255, 0.20); border-color: rgba(255, 255, 255, 0.32); }
+            QPushButton:pressed { background: rgba(255, 255, 255, 0.26); }
             QPushButton#PrimaryButton {
                 color: #ffffff;
-                border: 1px solid #1d1d1f;
-                background: #1d1d1f;
+                border: 1px solid rgba(255, 255, 255, 0.24);
+                background: #c82af2;
+            }
+            QPushButton#ActionButton {
+                color: #f8f4ff;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                background: rgba(255, 255, 255, 0.12);
             }
             QPushButton#PrimaryButton:hover,
-            QPushButton#NavSelected:hover { background: #343941; }
+            QPushButton#NavSelected:hover { background: #df35ff; }
+            QPushButton#OrbButton {
+                min-width: 118px;
+                min-height: 118px;
+                max-width: 132px;
+                max-height: 132px;
+                padding: 0;
+                border: 0;
+                background: transparent;
+                color: #ffffff;
+                font-weight: 900;
+            }
             QPushButton#NavButton {
-                min-height: 40px;
+                min-height: 58px;
+                min-width: 64px;
+                max-height: 58px;
+                max-width: 64px;
                 border-radius: 8px;
                 background: transparent;
                 border-color: transparent;
-                color: #3f454e;
+                color: #e8def8;
             }
             QPushButton#NavSelected {
-                min-height: 40px;
+                min-height: 58px;
+                min-width: 64px;
+                max-height: 58px;
+                max-width: 64px;
                 border-radius: 8px;
                 color: #ffffff;
-                border: 1px solid #1d1d1f;
-                background: #1d1d1f;
+                border: 1px solid rgba(255, 255, 255, 0.26);
+                background: #c82af2;
             }
             QPushButton:disabled {
                 color: #a4a9b1;
@@ -1506,14 +2288,31 @@ private:
         if (heroScanButton_) {
             heroScanButton_->setText(text.startScan);
         }
-        if (statusNavButton_) {
-            statusNavButton_->setText(text.statusTab);
+        if (topScanButton_) {
+            topScanButton_->setText(text.rescan);
+            topScanButton_->setToolTip(text.autoRefresh);
         }
-        if (scanNavButton_) {
-            scanNavButton_->setText(text.scanTab);
+        if (statusNavButton_) {
+            statusNavButton_->setText(QString());
+            statusNavButton_->setToolTip(text.metricsTitle);
+        }
+        if (appsNavButton_) {
+            appsNavButton_->setText(QString());
+            appsNavButton_->setToolTip(text.applicationsTitle);
+        }
+        if (containersNavButton_) {
+            containersNavButton_->setText(QString());
+            containersNavButton_->setToolTip(text.containerCleanup);
+        }
+        if (autostartNavButton_) {
+            autostartNavButton_->setText(QString());
+            autostartNavButton_->setToolTip(text.autostartOptimization);
         }
         if (scanButton_) {
-            scanButton_->setText(text.startScan);
+            scanButton_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Scan")
+                : QStringLiteral("扫描"));
+            scanButton_->setToolTip(text.startScan);
         }
         if (cleanOldButton_) {
             cleanOldButton_->setText(text.cleanOld);
@@ -1535,6 +2334,19 @@ private:
         if (metricsPageButton_) {
             metricsPageButton_->setText(text.metricsTitle);
         }
+        if (rootDetailsButton_) {
+            rootDetailsButton_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("View Details")
+                : QStringLiteral("查看明细"));
+        }
+        if (rootDetailsBackButton_) {
+            rootDetailsBackButton_->setText(text.back);
+        }
+        if (rootDetailsTitle_) {
+            rootDetailsTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Space Usage Details")
+                : QStringLiteral("空间占用明细"));
+        }
         if (appsPageButton_) {
             appsPageButton_->setText(text.applicationsTitle);
         }
@@ -1542,7 +2354,9 @@ private:
             backToAppsButton_->setText(text.back);
         }
         if (actionsTitle_) {
-            actionsTitle_->setText(text.scanTab);
+            actionsTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Smart Care")
+                : QStringLiteral("智能清理"));
         }
         if (scanProgressTitle_) {
             scanProgressTitle_->setText(text.scanProgressTitle);
@@ -1553,14 +2367,30 @@ private:
         if (resultTitle_) {
             resultTitle_->setText(text.scanResultTitle);
         }
+        if (selectionSummary_) {
+            updateOptimizationSelectionState();
+        }
         if (planTitle_) {
             planTitle_->setText(text.resultTitle);
         }
         if (applyOptimizationsButton_) {
-            applyOptimizationsButton_->setText(text.optimizeSelected);
+            applyOptimizationsButton_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Run")
+                : QStringLiteral("运行"));
+            applyOptimizationsButton_->setToolTip(text.optimizeSelected);
         }
         if (rescanButton_) {
             rescanButton_->setText(text.rescan);
+        }
+        if (selectAllButton_) {
+            selectAllButton_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Select all")
+                : QStringLiteral("全选"));
+        }
+        if (clearSelectionButton_) {
+            clearSelectionButton_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Clear")
+                : QStringLiteral("清空"));
         }
         if (tabs_) {
             tabs_->setTabText(0, text.statusTab);
@@ -1624,6 +2454,7 @@ private:
     {
         auto *group = new QFrame;
         group->setObjectName(QStringLiteral("ValuePill"));
+        group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         auto *groupLayout = new QVBoxLayout(group);
         groupLayout->setContentsMargins(10, 4, 10, 4);
         groupLayout->setSpacing(2);
@@ -1704,8 +2535,153 @@ private:
         layout->addWidget(titleLabel, 2);
 
         for (int i = 0; i < values.size(); ++i) {
-            layout->addWidget(createValuePill(labels.value(i), values.at(i)), 1);
+            QFrame *pill = createValuePill(labels.value(i), values.at(i));
+            if (values.size() == 1) {
+                pill->setMinimumWidth(300);
+                layout->addWidget(pill, 2);
+            } else {
+                layout->addWidget(pill, 1);
+            }
         }
+        return row;
+    }
+
+    ClickableCardFrame *createNavigationActionRow(const QString &title,
+                                                  const QString &detail,
+                                                  const QString &buttonText,
+                                                  const std::function<void()> &action)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setInteractive(true);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(14, 10, 14, 10);
+        layout->setSpacing(12);
+
+        auto *main = new QVBoxLayout;
+        main->setSpacing(6);
+        main->addWidget(makeLabel(title, QStringLiteral("RowTitle")));
+        auto *detailLabel = makeLabel(detail, QStringLiteral("PathValue"));
+        detailLabel->setWordWrap(true);
+        main->addWidget(detailLabel);
+        layout->addLayout(main, 1);
+
+        auto *button = new QPushButton(buttonText);
+        button->setObjectName(QStringLiteral("TaskDetailButton"));
+        button->setCursor(Qt::PointingHandCursor);
+        button->setMinimumWidth(118);
+        layout->addWidget(button, 0, Qt::AlignVCenter);
+
+        connect(row, &ClickableCardFrame::clicked, this, action);
+        connect(button, &QPushButton::clicked, this, action);
+        return row;
+    }
+
+    CardFrame *createSecondaryAutostartToolbar()
+    {
+        auto *row = new CardFrame;
+        row->setObjectName(QStringLiteral("InfoRow"));
+        row->setInteractive(false);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(16, 12, 16, 12);
+        layout->setSpacing(12);
+
+        auto *summary = makeLabel(language_->currentData().toString() == QStringLiteral("en")
+                                      ? QStringLiteral("Select entries, then run the chosen disable or restore changes.")
+                                      : QStringLiteral("选择启动项后，执行对应的禁用或还原变更。"),
+                                  QStringLiteral("PathValue"));
+        summary->setWordWrap(true);
+        layout->addWidget(summary, 1);
+
+        secondarySelectAllButton_ = new QPushButton(language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Select all")
+            : QStringLiteral("全选"));
+        secondaryClearSelectionButton_ = new QPushButton(language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Clear")
+            : QStringLiteral("清空"));
+        secondaryApplyButton_ = new AnimatedButton;
+        secondaryApplyButton_->setObjectName(QStringLiteral("PrimaryButton"));
+        secondaryApplyButton_->setIcon(style()->standardIcon(QStyle::SP_DialogApplyButton));
+        secondaryApplyButton_->setIconSize(QSize(18, 18));
+        secondaryApplyButton_->setText(language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Run")
+            : QStringLiteral("运行"));
+        secondarySelectAllButton_->setObjectName(QStringLiteral("TaskDetailButton"));
+        secondaryClearSelectionButton_->setObjectName(QStringLiteral("TaskDetailButton"));
+        secondarySelectAllButton_->setCursor(Qt::PointingHandCursor);
+        secondaryClearSelectionButton_->setCursor(Qt::PointingHandCursor);
+        secondaryApplyButton_->setCursor(Qt::PointingHandCursor);
+        secondarySelectAllButton_->setFixedWidth(92);
+        secondaryClearSelectionButton_->setFixedWidth(92);
+        secondaryApplyButton_->setFixedWidth(118);
+
+        layout->addWidget(secondarySelectAllButton_, 0);
+        layout->addWidget(secondaryClearSelectionButton_, 0);
+        layout->addWidget(secondaryApplyButton_, 0);
+
+        connect(secondarySelectAllButton_, &QPushButton::clicked, this, &CleanerWindow::selectAllOptimizations);
+        connect(secondaryClearSelectionButton_, &QPushButton::clicked, this, &CleanerWindow::clearOptimizationSelection);
+        connect(secondaryApplyButton_, &QPushButton::clicked, this, &CleanerWindow::applySelectedOptimizations);
+        return row;
+    }
+
+    ClickableCardFrame *createAutostartStatusRow(const QJsonObject &item)
+    {
+        const Text text = t();
+        const bool enabled = !item.value(QStringLiteral("disabled")).toBool();
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("AutostartActionRow"));
+        row->setInteractive(true);
+        row->setContextMenuPolicy(Qt::CustomContextMenu);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(14, 9, 14, 9);
+        layout->setSpacing(10);
+
+        auto *title = makeLabel(localName(item), QStringLiteral("RowTitle"));
+        title->setToolTip(localDescription(item));
+        layout->addWidget(title, 1);
+
+        QFrame *statusPill = createValuePill(text.status, enabled ? text.active : text.disabled);
+        statusPill->setFixedWidth(92);
+        layout->addWidget(statusPill, 0);
+
+        const QString detailText = language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Details")
+            : QStringLiteral("详情");
+        auto *detailButton = new QPushButton(detailText);
+        detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
+        detailButton->setCursor(Qt::PointingHandCursor);
+        detailButton->setFixedWidth(78);
+        layout->addWidget(detailButton, 0);
+
+        const QString detail = (language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Current: %1\n%2\n%3")
+            : QStringLiteral("当前：%1\n%2\n%3"))
+            .arg(enabled ? text.active : text.disabled,
+                 localDescription(item),
+                 item.value(QStringLiteral("target")).toString());
+        auto showDetails = [this, item, detail]() {
+            QMessageBox box(QMessageBox::Information, localName(item), detail, QMessageBox::NoButton, this);
+            box.setStyleSheet(styleSheet());
+            box.addButton(t().ok, QMessageBox::AcceptRole);
+            box.exec();
+        };
+        connect(detailButton, &QPushButton::clicked, this, showDetails);
+        connect(row, &ClickableCardFrame::clicked, this, showDetails);
+        connect(row, &QWidget::customContextMenuRequested, this, [this, row, item, detail, detailText, showDetails](const QPoint &pos) {
+            QMenu menu(row);
+            menu.setStyleSheet(styleSheet());
+            QAction *detailAction = menu.addAction(detailText);
+            QAction *copyAction = menu.addAction(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Copy details")
+                : QStringLiteral("复制详情"));
+            QAction *selected = menu.exec(row->mapToGlobal(pos));
+            if (selected == detailAction) {
+                showDetails();
+            } else if (selected == copyAction && QApplication::clipboard()) {
+                QApplication::clipboard()->setText(localName(item) + QStringLiteral("\n") + detail);
+            }
+        });
         return row;
     }
 
@@ -1741,21 +2717,151 @@ private:
         return row;
     }
 
-    CardFrame *createOptimizationRow(QCheckBox *box, const QString &title, const QString &detail, const QString &size)
+    ClickableCardFrame *createOptimizationRow(QCheckBox *box, const QString &title, const QString &detail, const QString &size)
     {
-        auto *row = new CardFrame;
-        row->setObjectName(QStringLiteral("InfoRow"));
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("OptimizationTaskRow"));
         row->setInteractive(true);
+        row->setContextMenuPolicy(Qt::CustomContextMenu);
+        if (!box->isEnabled()) {
+            row->setCursor(Qt::ArrowCursor);
+        }
         auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(14, 10, 14, 10);
+        layout->setContentsMargins(14, 12, 14, 12);
         layout->setSpacing(12);
         box->setText(title);
-        layout->addWidget(box, 2);
+        box->setToolTip(detail);
+        box->setObjectName(QStringLiteral("TaskCheckBox"));
+
+        auto *main = new QVBoxLayout;
+        main->setSpacing(8);
+        main->addWidget(box);
         auto *detailLabel = makeLabel(detail, QStringLiteral("PathValue"));
-        layout->addWidget(detailLabel, 3);
+        main->addWidget(detailLabel);
+        layout->addLayout(main, 4);
+
+        auto *side = new QVBoxLayout;
+        side->setSpacing(8);
         if (!size.isEmpty()) {
-            layout->addWidget(createValuePill(t().appSize, size), 1);
+            side->addWidget(createValuePill(t().appSize, size));
         }
+        const QString detailText = language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Details")
+            : QStringLiteral("详情");
+        auto *detailButton = new QPushButton(detailText);
+        detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
+        detailButton->setCursor(Qt::PointingHandCursor);
+        detailButton->setMinimumWidth(82);
+        side->addWidget(detailButton);
+        side->addStretch(1);
+        layout->addLayout(side, 1);
+
+        auto showDetails = [this, title, detail, size]() {
+            const QString body = size.isEmpty() ? detail : detail + QStringLiteral("\n\n") + t().appSize + QStringLiteral(" ") + size;
+            QMessageBox box(QMessageBox::Information, title, body, QMessageBox::NoButton, this);
+            box.setStyleSheet(styleSheet());
+            box.addButton(t().ok, QMessageBox::AcceptRole);
+            box.exec();
+        };
+        connect(detailButton, &QPushButton::clicked, this, showDetails);
+        connect(row, &ClickableCardFrame::clicked, this, [box]() {
+            if (box->isEnabled()) {
+                box->setChecked(!box->isChecked());
+            }
+        });
+        connect(row, &QWidget::customContextMenuRequested, this, [this, row, box, title, detail, detailText, showDetails](const QPoint &pos) {
+            QMenu menu(row);
+            menu.setStyleSheet(styleSheet());
+            QAction *toggleAction = menu.addAction(box->isChecked()
+                ? (language_->currentData().toString() == QStringLiteral("en") ? QStringLiteral("Deselect") : QStringLiteral("取消选择"))
+                : (language_->currentData().toString() == QStringLiteral("en") ? QStringLiteral("Select") : QStringLiteral("选择")));
+            toggleAction->setEnabled(box->isEnabled());
+            QAction *detailAction = menu.addAction(detailText);
+            QAction *copyAction = menu.addAction(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Copy details")
+                : QStringLiteral("复制详情"));
+            QAction *selected = menu.exec(row->mapToGlobal(pos));
+            if (selected == toggleAction && box->isEnabled()) {
+                box->setChecked(!box->isChecked());
+            } else if (selected == detailAction) {
+                showDetails();
+            } else if (selected == copyAction && QApplication::clipboard()) {
+                QApplication::clipboard()->setText(title + QStringLiteral("\n") + detail);
+            }
+        });
+        return row;
+    }
+
+    ClickableCardFrame *createAutostartActionRow(QCheckBox *box,
+                                                 const QString &title,
+                                                 const QString &currentLabel,
+                                                 const QString &actionLabel,
+                                                 const QString &detail)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("AutostartActionRow"));
+        row->setInteractive(true);
+        row->setContextMenuPolicy(Qt::CustomContextMenu);
+        auto *layout = new QHBoxLayout(row);
+        layout->setContentsMargins(14, 9, 14, 9);
+        layout->setSpacing(10);
+
+        box->setText(title);
+        box->setToolTip(detail);
+        box->setObjectName(QStringLiteral("TaskCheckBox"));
+        box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        layout->addWidget(box, 1);
+
+        QFrame *statusPill = createValuePill(t().status, currentLabel);
+        QFrame *actionPill = createValuePill(language_->currentData().toString() == QStringLiteral("en")
+                                                 ? QStringLiteral("Action")
+                                                 : QStringLiteral("动作"),
+                                             actionLabel);
+        statusPill->setFixedWidth(88);
+        actionPill->setFixedWidth(88);
+        layout->addWidget(statusPill, 0);
+        layout->addWidget(actionPill, 0);
+
+        const QString detailText = language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Details")
+            : QStringLiteral("详情");
+        auto *detailButton = new QPushButton(detailText);
+        detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
+        detailButton->setCursor(Qt::PointingHandCursor);
+        detailButton->setFixedWidth(78);
+        layout->addWidget(detailButton, 0);
+
+        auto showDetails = [this, title, detail]() {
+            QMessageBox box(QMessageBox::Information, title, detail, QMessageBox::NoButton, this);
+            box.setStyleSheet(styleSheet());
+            box.addButton(t().ok, QMessageBox::AcceptRole);
+            box.exec();
+        };
+        connect(detailButton, &QPushButton::clicked, this, showDetails);
+        connect(row, &ClickableCardFrame::clicked, this, [box]() {
+            if (box->isEnabled()) {
+                box->setChecked(!box->isChecked());
+            }
+        });
+        connect(row, &QWidget::customContextMenuRequested, this, [this, row, box, title, detail, detailText, showDetails](const QPoint &pos) {
+            QMenu menu(row);
+            menu.setStyleSheet(styleSheet());
+            QAction *toggleAction = menu.addAction(box->isChecked()
+                ? (language_->currentData().toString() == QStringLiteral("en") ? QStringLiteral("Deselect") : QStringLiteral("取消选择"))
+                : (language_->currentData().toString() == QStringLiteral("en") ? QStringLiteral("Select") : QStringLiteral("选择")));
+            QAction *detailAction = menu.addAction(detailText);
+            QAction *copyAction = menu.addAction(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Copy details")
+                : QStringLiteral("复制详情"));
+            QAction *selected = menu.exec(row->mapToGlobal(pos));
+            if (selected == toggleAction && box->isEnabled()) {
+                box->setChecked(!box->isChecked());
+            } else if (selected == detailAction) {
+                showDetails();
+            } else if (selected == copyAction && QApplication::clipboard()) {
+                QApplication::clipboard()->setText(title + QStringLiteral("\n") + detail);
+            }
+        });
         return row;
     }
 
@@ -1764,7 +2870,7 @@ private:
         const Text text = t();
         clearRows(metricsRows_);
         clearMetricChart();
-        const QStringList names{text.kaiming, text.ostree, text.kare, text.otherRoot};
+        const QStringList names{text.kaiming, text.ostree, text.kare, text.kareBase, text.appPayload, text.systemOther};
         for (const QString &name : names) {
             addMetricCard(name, text.pendingScan, QStringLiteral("-"), text.pendingScan);
         }
@@ -1781,7 +2887,7 @@ private:
             delete overallRows_->takeAt(overallRows_->count() - 1);
         }
         overallRows_->addWidget(createInfoRow(text.rootUsed,
-                                              {text.before, text.explainedUsage, text.otherRoot},
+                                              {text.before, text.explainedUsage, text.systemOther},
                                               {text.pendingScan, text.pendingScan, text.pendingScan}));
         overallRows_->addStretch(1);
     }
@@ -1817,8 +2923,9 @@ private:
         metricsSeries_->clear();
         metricsSeries_->append(t().pendingScan, 1.0);
         if (QPieSlice *slice = metricsSeries_->slices().isEmpty() ? nullptr : metricsSeries_->slices().first()) {
-            slice->setColor(QColor(203, 211, 221));
-            slice->setBorderColor(QColor(203, 211, 221));
+            slice->setColor(QColor(79, 42, 136));
+            slice->setBorderColor(QColor(143, 92, 198));
+            slice->setLabelColor(QColor(246, 239, 255));
             slice->setLabelVisible(false);
         }
     }
@@ -1830,10 +2937,12 @@ private:
         }
         metricsSeries_->clear();
         const QList<QColor> colors{
-            QColor(29, 31, 36),
-            QColor(92, 105, 118),
-            QColor(130, 145, 158),
-            QColor(181, 190, 199)
+            QColor(216, 54, 232),
+            QColor(69, 221, 196),
+            QColor(121, 88, 231),
+            QColor(254, 159, 73),
+            QColor(255, 214, 92),
+            QColor(139, 166, 255)
         };
         for (int i = 0; i < names.size() && i < values.size(); ++i) {
             const qint64 value = qMax<qint64>(0, values.at(i));
@@ -1843,12 +2952,26 @@ private:
             QPieSlice *slice = metricsSeries_->append(names.at(i), static_cast<qreal>(value));
             const QColor color = colors.at(i % colors.size());
             slice->setColor(color);
-            slice->setBorderColor(QColor(255, 255, 255));
+            slice->setBorderColor(QColor(24, 7, 67));
+            slice->setLabelColor(QColor(246, 239, 255));
             const QString percent = rootValue > 0
                 ? QString::number(value * 100.0 / rootValue, 'f', 1) + QLatin1Char('%')
                 : QStringLiteral("-");
-            slice->setLabel(names.at(i) + QStringLiteral(" ") + percent);
+            slice->setLabel(fmtBytes(value) + QStringLiteral(" · ") + percent);
             slice->setLabelVisible(true);
+        }
+        const QList<QLegendMarker *> markers = metricsChart_ ? metricsChart_->legend()->markers(metricsSeries_) : QList<QLegendMarker *>();
+        int markerIndex = 0;
+        for (int i = 0; i < names.size() && i < values.size() && markerIndex < markers.size(); ++i) {
+            const qint64 value = qMax<qint64>(0, values.at(i));
+            if (value == 0) {
+                continue;
+            }
+            const QString percent = rootValue > 0
+                ? QString::number(value * 100.0 / rootValue, 'f', 1) + QLatin1Char('%')
+                : QStringLiteral("-");
+            markers.at(markerIndex)->setLabel(names.at(i) + QStringLiteral("  ") + fmtBytes(value) + QStringLiteral(" · ") + percent);
+            ++markerIndex;
         }
         if (metricsSeries_->slices().isEmpty()) {
             clearMetricChart();
@@ -1958,8 +3081,14 @@ private:
         if (visual_) {
             visual_->setWorking(busy);
         }
+        if (resultVisual_) {
+            resultVisual_->setWorking(busy);
+        }
         if (scanButton_) {
             scanButton_->setEnabled(!busy);
+        }
+        if (topScanButton_) {
+            topScanButton_->setEnabled(!busy);
         }
         if (cleanOldButton_) {
             cleanOldButton_->setEnabled(!busy);
@@ -1968,13 +3097,24 @@ private:
             autostartButton_->setEnabled(!busy);
         }
         if (applyOptimizationsButton_) {
-            applyOptimizationsButton_->setEnabled(!busy);
+            if (busy) {
+                applyOptimizationsButton_->setEnabled(false);
+            } else {
+                updateOptimizationSelectionState();
+            }
         }
         if (rescanButton_) {
             rescanButton_->setEnabled(!busy);
         }
+        if (progress_) {
+            progress_->setProperty("busy", busy);
+            progress_->style()->unpolish(progress_);
+            progress_->style()->polish(progress_);
+        }
+        updateBusyOverlay();
         if (busy) {
-            progress_->setRange(0, 0);
+            progress_->setRange(0, 100);
+            progress_->setValue(scanProgressValue_ > 0 ? scanProgressValue_ : 6);
             lastUpdate_->setText(t().updating);
         } else {
             progress_->setRange(0, 100);
@@ -1993,6 +3133,10 @@ private:
             return;
         }
         scanProgressValue_ = 4;
+        if (progress_) {
+            progress_->setRange(0, 100);
+            progress_->setValue(scanProgressValue_);
+        }
         if (scanFlowProgress_) {
             scanFlowProgress_->setValue(scanProgressValue_);
         }
@@ -2000,18 +3144,21 @@ private:
             scanProgressDetail_->setText(t().scanProgressDetail);
         }
         scanStack_->setCurrentIndex(1);
+        updateBusyOverlay();
         fadeIn(scanStack_->currentWidget());
         if (!scanProgressTimer_) {
             scanProgressTimer_ = new QTimer(this);
             connect(scanProgressTimer_, &QTimer::timeout, this, [this]() {
-                if (!scanFlowProgress_) {
-                    return;
+                scanProgressValue_ = qMin(92, scanProgressValue_ + (scanProgressValue_ < 55 ? 6 : 3));
+                if (scanFlowProgress_) {
+                    scanFlowProgress_->setValue(scanProgressValue_);
                 }
-                scanProgressValue_ = qMin(88, scanProgressValue_ + 7);
-                scanFlowProgress_->setValue(scanProgressValue_);
+                if (progress_) {
+                    progress_->setValue(scanProgressValue_);
+                }
             });
         }
-        scanProgressTimer_->start(350);
+        scanProgressTimer_->start(260);
     }
 
     void finishScanProgress()
@@ -2023,6 +3170,11 @@ private:
         if (scanFlowProgress_) {
             scanFlowProgress_->setValue(100);
         }
+        if (progress_) {
+            progress_->setRange(0, 100);
+            progress_->setValue(100);
+        }
+        updateBusyOverlay();
     }
 
     void scanInternal(bool manual)
@@ -2062,7 +3214,7 @@ private:
             updateApplications();
             updateStatusSummary();
             if (manual) {
-                showScanResults();
+                showScanResults(activeReviewFilter_);
             }
             animateRefresh();
             setBusy(false);
@@ -2096,52 +3248,99 @@ private:
         optimizationRows_->addStretch(1);
     }
 
-    void showScanResults()
+    void showScanResults(int filter = -1)
     {
+        if (filter >= 0) {
+            activeReviewFilter_ = filter;
+        }
+        autostartSelectionPageOpen_ = false;
         const Text text = t();
         resultContainerBoxes_.clear();
-        resultAutostartBoxes_.clear();
+        resultAutostartRows_.clear();
         clearRows(optimizationRows_);
+        secondarySelectAllButton_ = nullptr;
+        secondaryClearSelectionButton_ = nullptr;
+        secondaryApplyButton_ = nullptr;
         clearRows(planRows_);
 
         const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
         const QJsonArray autostarts = state_.value(QStringLiteral("autostarts")).toArray();
         int selectableContainers = 0;
         int selectableAutostarts = 0;
+        const bool showContainers = activeReviewFilter_ == 0 || activeReviewFilter_ == 1;
+        const bool showAutostarts = activeReviewFilter_ == 0 || activeReviewFilter_ == 2;
 
-        addOptimizationCard(createInfoRow(text.containerCleanup, {text.status}, {text.selectContainers}));
-        for (const QJsonValue &value : containers) {
-            const QJsonObject item = value.toObject();
-            auto *box = new QCheckBox;
-            const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
-            box->setChecked(selectable);
-            box->setEnabled(selectable);
-            if (selectable) {
-                ++selectableContainers;
+        if (resultTitle_) {
+            resultTitle_->setText(activeReviewFilter_ == 1 ? text.containerCleanup
+                                  : activeReviewFilter_ == 2 ? text.autostartOptimization
+                                                             : text.scanResultTitle);
+        }
+        setAutostartSecondaryLayout(false);
+
+        if (showContainers) {
+            addOptimizationCard(createInfoRow(text.containerCleanup, {text.status}, {text.selectContainers}));
+            for (const QJsonValue &value : containers) {
+                const QJsonObject item = value.toObject();
+                auto *box = new QCheckBox;
+                const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
+                box->setChecked(selectable);
+                box->setEnabled(selectable);
+                connect(box, &QCheckBox::toggled, this, &CleanerWindow::updateOptimizationSelectionState);
+                if (selectable) {
+                    ++selectableContainers;
+                }
+                const QString title = QStringLiteral("%1 / %2 / %3").arg(item.value(QStringLiteral("ref")).toString(),
+                                                                         item.value(QStringLiteral("module")).toString(),
+                                                                         item.value(QStringLiteral("version")).toString());
+                const QString detail = selectable
+                    ? QStringLiteral("%1\n%2").arg(item.value(QStringLiteral("kind")).toString(),
+                                                   item.value(QStringLiteral("path")).toString())
+                    : QStringLiteral("%1\n%2\n%3").arg(item.value(QStringLiteral("kind")).toString(),
+                                                       item.value(QStringLiteral("path")).toString(),
+                                                       language_->currentData().toString() == QStringLiteral("en")
+                                                           ? QStringLiteral("Mounted or in use; this item cannot be selected safely.")
+                                                           : QStringLiteral("当前已挂载或正在使用，不能安全选择。"));
+                addOptimizationCard(createOptimizationRow(box,
+                                                          title,
+                                                          detail,
+                                                          fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
+                resultContainerBoxes_.append({item.value(QStringLiteral("path")).toString(), box});
             }
-            const QString title = QStringLiteral("%1  %2").arg(item.value(QStringLiteral("ref")).toString(),
-                                                               item.value(QStringLiteral("version")).toString());
-            addOptimizationCard(createOptimizationRow(box,
-                                                      title,
-                                                      item.value(QStringLiteral("path")).toString(),
-                                                      fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
-            resultContainerBoxes_.append({item.value(QStringLiteral("path")).toString(), box});
         }
 
-        addOptimizationCard(createInfoRow(text.autostartOptimization, {text.status}, {text.selectAutostarts}));
-        for (const QJsonValue &value : autostarts) {
-            const QJsonObject item = value.toObject();
-            if (item.value(QStringLiteral("disabled")).toBool()) {
-                continue;
+        if (showAutostarts) {
+            int activeEntries = 0;
+            int disabledEntries = 0;
+            for (const QJsonValue &value : autostarts) {
+                if (value.toObject().value(QStringLiteral("disabled")).toBool()) {
+                    ++disabledEntries;
+                } else {
+                    ++activeEntries;
+                }
             }
-            auto *box = new QCheckBox;
-            box->setChecked(true);
-            ++selectableAutostarts;
-            addOptimizationCard(createOptimizationRow(box,
-                                                      localName(item),
-                                                      localDescription(item) + QStringLiteral("\n") + item.value(QStringLiteral("target")).toString(),
-                                                      QString()));
-            resultAutostartBoxes_.append({item.value(QStringLiteral("id")).toString(), box});
+            selectableAutostarts = autostarts.size();
+            const QString detail = language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("%1 entries: %2 enabled, %3 disabled. Open the secondary list to disable enabled entries or restore disabled entries.")
+                      .arg(autostarts.size())
+                      .arg(activeEntries)
+                      .arg(disabledEntries)
+                : QStringLiteral("%1 个启动项：%2 个启用，%3 个禁用。进入二级列表后，可禁用已启用项，也可还原已禁用项。")
+                      .arg(autostarts.size())
+                      .arg(activeEntries)
+                      .arg(disabledEntries);
+            addOptimizationCard(createNavigationActionRow(text.autostartOptimization,
+                                                          detail,
+                                                          language_->currentData().toString() == QStringLiteral("en")
+                                                              ? QStringLiteral("Open list")
+                                                              : QStringLiteral("进入列表"),
+                                                          [this]() { showAutostartSelectionPage(); }));
+            if (autostarts.isEmpty()) {
+                addOptimizationCard(createInfoRow(text.autostartOptimization, {text.status}, {text.noAutostarts}));
+            } else {
+                for (const QJsonValue &value : autostarts) {
+                    addOptimizationCard(createAutostartStatusRow(value.toObject()));
+                }
+            }
         }
 
         if (selectableContainers == 0 && selectableAutostarts == 0) {
@@ -2151,8 +3350,15 @@ private:
         if (resultSummary_) {
             resultSummary_->setText(scanSummary());
         }
-        if (applyOptimizationsButton_) {
-            applyOptimizationsButton_->setEnabled(selectableContainers > 0 || selectableAutostarts > 0);
+        setOptimizationActionControlsVisible(activeReviewFilter_ != 2);
+        updateOptimizationSelectionState();
+        if (showAutostarts && resultAutostartRows_.isEmpty() && selectionSummary_) {
+            selectionSummary_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Autostart entries are managed in a secondary list. Open the list to choose disable or restore actions.")
+                : QStringLiteral("自启动项在二级列表中管理。进入列表后可选择禁用或还原。"));
+        }
+        if (showAutostarts && !showContainers && resultSummaryCard_) {
+            resultSummaryCard_->hide();
         }
         if (scanStack_) {
             scanStack_->setCurrentIndex(2);
@@ -2160,13 +3366,240 @@ private:
         }
     }
 
+    void showAutostartSelectionPage()
+    {
+        autostartSelectionPageOpen_ = true;
+        const Text text = t();
+        resultContainerBoxes_.clear();
+        resultAutostartRows_.clear();
+        clearRows(optimizationRows_);
+        secondarySelectAllButton_ = nullptr;
+        secondaryClearSelectionButton_ = nullptr;
+        secondaryApplyButton_ = nullptr;
+        clearRows(planRows_);
+
+        if (resultTitle_) {
+            resultTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Autostart Entries")
+                : QStringLiteral("自启动项列表"));
+        }
+        setAutostartSecondaryLayout(true);
+
+        addOptimizationCard(createNavigationActionRow(language_->currentData().toString() == QStringLiteral("en")
+                                                          ? QStringLiteral("Back to optimization overview")
+                                                          : QStringLiteral("返回优化概览"),
+                                                      language_->currentData().toString() == QStringLiteral("en")
+                                                          ? QStringLiteral("Return to the first-level optimization page.")
+                                                          : QStringLiteral("返回上一级优化入口页面。"),
+                                                      text.back,
+                                                      [this]() { showScanResults(activeReviewFilter_); }));
+        addOptimizationCard(createSecondaryAutostartToolbar());
+
+        const QJsonArray autostarts = state_.value(QStringLiteral("autostarts")).toArray();
+        if (autostarts.isEmpty()) {
+            addOptimizationCard(createInfoRow(text.autostartOptimization, {text.status}, {text.noAutostarts}));
+        }
+
+        for (const QJsonValue &value : autostarts) {
+            const QJsonObject item = value.toObject();
+            const bool currentlyEnabled = !item.value(QStringLiteral("disabled")).toBool();
+            auto *box = new QCheckBox;
+            box->setChecked(false);
+            connect(box, &QCheckBox::toggled, this, &CleanerWindow::updateOptimizationSelectionState);
+            const QString actionLabel = language_->currentData().toString() == QStringLiteral("en")
+                ? (currentlyEnabled ? QStringLiteral("Disable") : QStringLiteral("Restore"))
+                : (currentlyEnabled ? QStringLiteral("禁用") : QStringLiteral("还原"));
+            const QString currentLabel = currentlyEnabled ? text.active : text.disabled;
+            const QString nextLabel = language_->currentData().toString() == QStringLiteral("en")
+                ? (currentlyEnabled
+                    ? QStringLiteral("Selected action: write a user Hidden=true override.")
+                    : QStringLiteral("Selected action: remove the user override and inherit system autostart again."))
+                : (currentlyEnabled
+                    ? QStringLiteral("选中后：写入用户级 Hidden=true 覆盖，停止登录自启动。")
+                    : QStringLiteral("选中后：移除用户级覆盖，恢复继承系统自启动项。"));
+            const QString detail = (language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Current: %1\nAction: %2\n%3\n%4\n%5")
+                : QStringLiteral("当前：%1\n动作：%2\n%3\n%4\n%5"))
+                .arg(currentLabel,
+                     actionLabel,
+                     nextLabel,
+                     localDescription(item),
+                     item.value(QStringLiteral("target")).toString());
+            addOptimizationCard(createAutostartActionRow(box,
+                                                         localName(item),
+                                                         currentLabel,
+                                                         actionLabel,
+                                                         detail));
+            resultAutostartRows_.append({item.value(QStringLiteral("id")).toString(), currentlyEnabled, box});
+        }
+
+        if (resultSummary_) {
+            resultSummary_->setText(scanSummary());
+        }
+        setOptimizationActionControlsVisible(true);
+        updateOptimizationSelectionState();
+        if (scanStack_) {
+            scanStack_->setCurrentIndex(2);
+            fadeIn(scanStack_->currentWidget());
+        }
+    }
+
+    qint64 oldContainerBytesForPath(const QString &path) const
+    {
+        for (const QJsonValue &value : state_.value(QStringLiteral("oldContainers")).toArray()) {
+            const QJsonObject item = value.toObject();
+            if (item.value(QStringLiteral("path")).toString() == path) {
+                return jsonInt64(item, QStringLiteral("bytes"));
+            }
+        }
+        return 0;
+    }
+
+    void updateOptimizationSelectionState()
+    {
+        int availableContainers = 0;
+        int selectedContainers = 0;
+        int availableAutostarts = 0;
+        int selectedAutostarts = 0;
+        int selectedAutostartDisables = 0;
+        int selectedAutostartRestores = 0;
+        qint64 selectedBytes = 0;
+
+        for (const auto &pair : resultContainerBoxes_) {
+            if (!pair.second || !pair.second->isEnabled()) {
+                continue;
+            }
+            ++availableContainers;
+            if (pair.second->isChecked()) {
+                ++selectedContainers;
+                selectedBytes += oldContainerBytesForPath(pair.first);
+            }
+        }
+        for (const AutostartSelectionRow &row : resultAutostartRows_) {
+            if (!row.box || !row.box->isEnabled()) {
+                continue;
+            }
+            ++availableAutostarts;
+            if (row.box->isChecked()) {
+                ++selectedAutostarts;
+                if (row.currentlyEnabled) {
+                    ++selectedAutostartDisables;
+                } else {
+                    ++selectedAutostartRestores;
+                }
+            }
+        }
+
+        if (selectionSummary_) {
+            selectionSummary_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Selected %1 old containers (%2), %3 disable changes, and %4 restore changes. Available: %5 containers, %6 entries.")
+                      .arg(selectedContainers)
+                      .arg(fmtBytes(selectedBytes))
+                      .arg(selectedAutostartDisables)
+                      .arg(selectedAutostartRestores)
+                      .arg(availableContainers)
+                      .arg(availableAutostarts)
+                : QStringLiteral("已选择 %1 个旧版本容器（%2）、%3 个禁用变更、%4 个还原变更。可选：%5 个容器、%6 个启动项。")
+                      .arg(selectedContainers)
+                      .arg(fmtBytes(selectedBytes))
+                      .arg(selectedAutostartDisables)
+                      .arg(selectedAutostartRestores)
+                      .arg(availableContainers)
+                      .arg(availableAutostarts));
+        }
+        if (applyOptimizationsButton_) {
+            applyOptimizationsButton_->setEnabled(!busy_ && (selectedContainers > 0 || selectedAutostarts > 0));
+        }
+        if (secondaryApplyButton_) {
+            secondaryApplyButton_->setEnabled(!busy_ && (selectedContainers > 0 || selectedAutostarts > 0));
+        }
+        const bool hasAvailable = availableContainers > 0 || availableAutostarts > 0;
+        if (selectAllButton_) {
+            selectAllButton_->setEnabled(!busy_ && hasAvailable);
+        }
+        if (secondarySelectAllButton_) {
+            secondarySelectAllButton_->setEnabled(!busy_ && hasAvailable);
+        }
+        if (clearSelectionButton_) {
+            clearSelectionButton_->setEnabled(!busy_ && hasAvailable && (selectedContainers > 0 || selectedAutostarts > 0));
+        }
+        if (secondaryClearSelectionButton_) {
+            secondaryClearSelectionButton_->setEnabled(!busy_ && hasAvailable && (selectedContainers > 0 || selectedAutostarts > 0));
+        }
+    }
+
+    void setOptimizationActionControlsVisible(bool visible)
+    {
+        if (selectAllButton_) {
+            selectAllButton_->setVisible(visible);
+        }
+        if (clearSelectionButton_) {
+            clearSelectionButton_->setVisible(visible);
+        }
+        if (applyOptimizationsButton_) {
+            applyOptimizationsButton_->setVisible(visible);
+        }
+    }
+
+    void setAutostartSecondaryLayout(bool secondary)
+    {
+        if (resultSummaryCard_) {
+            resultSummaryCard_->setVisible(!secondary);
+        }
+        if (optimizationScrollArea_) {
+            optimizationScrollArea_->setMinimumHeight(secondary ? 560 : 430);
+        }
+    }
+
+    void showActionResultPage()
+    {
+        if (!scanStack_) {
+            return;
+        }
+        scanStack_->setCurrentIndex(3);
+        updateBusyOverlay();
+        fadeIn(scanStack_->currentWidget());
+    }
+
+    void setOptimizationSelection(bool checked)
+    {
+        for (const auto &pair : resultContainerBoxes_) {
+            if (pair.second && pair.second->isEnabled()) {
+                pair.second->setChecked(checked);
+            }
+        }
+        for (const AutostartSelectionRow &row : resultAutostartRows_) {
+            if (row.box && row.box->isEnabled()) {
+                row.box->setChecked(checked);
+            }
+        }
+        updateOptimizationSelectionState();
+    }
+
+    void selectAllOptimizations()
+    {
+        setOptimizationSelection(true);
+    }
+
+    void clearOptimizationSelection()
+    {
+        setOptimizationSelection(false);
+    }
+
     void updateMetrics()
     {
         const Text text = t();
         const QJsonObject metrics = state_.value(QStringLiteral("metrics")).toObject();
         const qint64 rootValue = jsonInt64(metrics, QStringLiteral("root_used"));
-        const QStringList keys{QStringLiteral("kaiming"), QStringLiteral("ostree_upper"), QStringLiteral("kare_upper"), QStringLiteral("root_other")};
-        const QStringList names{text.kaiming, text.ostree, text.kare, text.otherRoot};
+        const QStringList keys{
+            QStringLiteral("kaiming"),
+            QStringLiteral("ostree_upper"),
+            QStringLiteral("kare_upper"),
+            QStringLiteral("kare_base"),
+            QStringLiteral("app_payload"),
+            QStringLiteral("system_other")
+        };
+        const QStringList names{text.kaiming, text.ostree, text.kare, text.kareBase, text.appPayload, text.systemOther};
         QList<qint64> values;
         qint64 explained = 0;
         for (const QString &key : keys) {
@@ -2181,8 +3614,8 @@ private:
         clearRows(overallRows_);
         if (overallRows_) {
             overallRows_->addWidget(createInfoRow(text.rootUsed,
-                                                  {text.before, text.explainedUsage, text.otherRoot},
-                                                  {fmtBytes(rootValue), fmtBytes(explained - values.value(3)), fmtBytes(values.value(3))}));
+                                                  {text.before, text.explainedUsage, text.systemOther},
+                                                  {fmtBytes(rootValue), fmtBytes(rootValue - values.value(5)), fmtBytes(values.value(5))}));
             overallRows_->addStretch(1);
         }
         updateMetricChart(names, values, rootValue);
@@ -2241,16 +3674,29 @@ private:
 
     void updateMainNav(int index)
     {
-        if (!statusNavButton_ || !scanNavButton_) {
+        if (!statusNavButton_ || !appsNavButton_ || !containersNavButton_ || !autostartNavButton_) {
             return;
         }
-        statusNavButton_->setObjectName(index == 0 ? QStringLiteral("NavSelected") : QStringLiteral("NavButton"));
-        scanNavButton_->setObjectName(index == 1 ? QStringLiteral("NavSelected") : QStringLiteral("NavButton"));
-        statusNavButton_->style()->unpolish(statusNavButton_);
-        statusNavButton_->style()->polish(statusNavButton_);
-        scanNavButton_->style()->unpolish(scanNavButton_);
-        scanNavButton_->style()->polish(scanNavButton_);
-        fadeIn(tabs_ ? tabs_->currentWidget() : nullptr);
+        if (index == 0 && statusStack_) {
+            activeNavIndex_ = statusStack_->currentIndex() == 1 ? 1 : 0;
+        } else if (index == 1 && activeNavIndex_ < 2) {
+            activeNavIndex_ = 2;
+        }
+
+        const QList<QPushButton *> buttons = {
+            statusNavButton_,
+            appsNavButton_,
+            containersNavButton_,
+            autostartNavButton_
+        };
+        for (int i = 0; i < buttons.size(); ++i) {
+            QPushButton *button = buttons.at(i);
+            button->setObjectName(i == activeNavIndex_ ? QStringLiteral("NavSelected") : QStringLiteral("NavButton"));
+            button->style()->unpolish(button);
+            button->style()->polish(button);
+            button->update();
+        }
+        applyPageTheme();
     }
 
     void showStatusSubPage(int index)
@@ -2259,13 +3705,90 @@ private:
             return;
         }
         statusStack_->setCurrentIndex(index);
-        metricsPageButton_->setObjectName(index == 0 ? QStringLiteral("PrimaryButton") : QStringLiteral("ActionButton"));
-        appsPageButton_->setObjectName(index == 1 ? QStringLiteral("PrimaryButton") : QStringLiteral("ActionButton"));
-        metricsPageButton_->style()->unpolish(metricsPageButton_);
-        metricsPageButton_->style()->polish(metricsPageButton_);
-        appsPageButton_->style()->unpolish(appsPageButton_);
-        appsPageButton_->style()->polish(appsPageButton_);
-        fadeIn(statusStack_->currentWidget());
+        if (metricsPageButton_ && appsPageButton_) {
+            metricsPageButton_->setObjectName(index == 0 ? QStringLiteral("PrimaryButton") : QStringLiteral("ActionButton"));
+            appsPageButton_->setObjectName(index == 1 ? QStringLiteral("PrimaryButton") : QStringLiteral("ActionButton"));
+            metricsPageButton_->style()->unpolish(metricsPageButton_);
+            metricsPageButton_->style()->polish(metricsPageButton_);
+            appsPageButton_->style()->unpolish(appsPageButton_);
+            appsPageButton_->style()->polish(appsPageButton_);
+        }
+        updateMainNav(tabs_ ? tabs_->currentIndex() : 0);
+    }
+
+    void primeTheme(int theme)
+    {
+        if (qApp) {
+            qApp->setProperty("spaceGuardTheme", theme);
+        }
+        update();
+        repaint();
+        if (appShell_) {
+            appShell_->setTargetTheme(theme);
+        }
+    }
+
+    void applyPageTheme()
+    {
+        if (!appShell_ || !sideBar_ || !topBarFrame_) {
+            return;
+        }
+        const int tabIndex = tabs_ ? tabs_->currentIndex() : 0;
+        const int subIndex = statusStack_ ? statusStack_->currentIndex() : 0;
+        const int theme = tabIndex == 1 ? 2 : (subIndex == 1 ? 1 : 0);
+        QString shellGradient;
+        QString sideGradient;
+        QString topGlassGradient;
+
+        if (tabIndex == 1) {
+            shellGradient = QStringLiteral(
+                "stop:0 #8f22b5, stop:0.30 #5a168f, stop:0.66 #25055f, stop:1 #0a023e");
+            sideGradient = QStringLiteral(
+                "stop:0 rgba(255, 118, 233, 0.28), stop:0.50 rgba(87, 21, 139, 0.28), stop:1 rgba(20, 4, 72, 0.28)");
+            topGlassGradient = QStringLiteral(
+                "stop:0 rgba(255, 118, 233, 0.16), stop:0.48 rgba(87, 21, 139, 0.12), stop:1 rgba(20, 4, 72, 0.10)");
+        } else if (subIndex == 1) {
+            shellGradient = QStringLiteral(
+                "stop:0 #087580, stop:0.30 #0f5e92, stop:0.68 #143078, stop:1 #08033f");
+            sideGradient = QStringLiteral(
+                "stop:0 rgba(66, 235, 213, 0.24), stop:0.52 rgba(20, 72, 126, 0.30), stop:1 rgba(8, 3, 63, 0.30)");
+            topGlassGradient = QStringLiteral(
+                "stop:0 rgba(66, 235, 213, 0.15), stop:0.50 rgba(20, 72, 126, 0.12), stop:1 rgba(8, 3, 63, 0.10)");
+        } else {
+            shellGradient = QStringLiteral(
+                "stop:0 #9d3210, stop:0.30 #883016, stop:0.66 #5b1256, stop:1 #17033d");
+            sideGradient = QStringLiteral(
+                "stop:0 rgba(255, 145, 56, 0.23), stop:0.52 rgba(116, 31, 101, 0.28), stop:1 rgba(23, 3, 61, 0.30)");
+            topGlassGradient = QStringLiteral(
+                "stop:0 rgba(255, 145, 56, 0.15), stop:0.50 rgba(116, 31, 101, 0.12), stop:1 rgba(23, 3, 61, 0.10)");
+        }
+
+        Q_UNUSED(shellGradient);
+        if (qApp) {
+            qApp->setProperty("spaceGuardTheme", theme);
+        }
+        appShell_->setTargetTheme(theme);
+        sideBar_->setStyleSheet(QStringLiteral(
+            "QFrame#SideBar {"
+            "border-radius: 8px;"
+            "border: 1px solid rgba(255, 255, 255, 0.10);"
+            "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, %1);"
+            "}").arg(sideGradient));
+        topBarFrame_->setStyleSheet(QStringLiteral(
+            "QFrame#TopBarFrame {"
+            "border-radius: 8px;"
+            "border: 1px solid rgba(255, 255, 255, 0.14);"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, %1);"
+            "}").arg(topGlassGradient));
+        if (metricsChart_) {
+            metricsChart_->setBackgroundBrush(QBrush(Qt::transparent));
+            metricsChart_->setPlotAreaBackgroundBrush(QBrush(Qt::transparent));
+            metricsChart_->legend()->setLabelColor(QColor(246, 239, 255));
+        }
+        for (CardFrame *card : findChildren<CardFrame *>()) {
+            card->update();
+        }
+        update();
     }
 
     void fadeIn(QWidget *widget)
@@ -2273,17 +3796,38 @@ private:
         if (!widget) {
             return;
         }
+        widget->setGraphicsEffect(nullptr);
+        widget->update();
+    }
+
+    void pulseWidget(QWidget *widget)
+    {
+        if (!widget) {
+            return;
+        }
         auto *effect = new QGraphicsOpacityEffect(widget);
         widget->setGraphicsEffect(effect);
         auto *animation = new QPropertyAnimation(effect, "opacity", widget);
-        animation->setDuration(180);
-        animation->setStartValue(0.72);
+        animation->setDuration(220);
+        animation->setStartValue(0.78);
         animation->setEndValue(1.0);
         animation->setEasingCurve(QEasingCurve::OutCubic);
         connect(animation, &QPropertyAnimation::finished, widget, [widget]() {
             widget->setGraphicsEffect(nullptr);
         });
         animation->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+
+    void updateBusyOverlay()
+    {
+        if (!busyOverlay_) {
+            return;
+        }
+        const bool scanProgressVisible = scanStack_ && scanStack_->currentIndex() == 1;
+        busyOverlay_->setVisible(busy_ && !scanProgressVisible);
+        if (busyOverlay_->isVisible()) {
+            busyOverlay_->raise();
+        }
     }
 
     qint64 oldContainersBytes() const
@@ -2341,6 +3885,12 @@ private:
         dialog.setStyleSheet(styleSheet());
         dialog.setWindowTitle(t().selectAutostarts);
         auto *layout = new QVBoxLayout(&dialog);
+        auto *hint = new QLabel(language_->currentData().toString() == QStringLiteral("en")
+            ? QStringLiteral("Checked entries stay or become enabled. Clear a checked entry to disable it; check a disabled entry to restore it.")
+            : QStringLiteral("勾选表示保持或恢复启用；取消勾选已启用项会禁用，勾选已禁用项会还原。"));
+        hint->setObjectName(QStringLiteral("Intro"));
+        hint->setWordWrap(true);
+        layout->addWidget(hint);
         auto *scroll = new QScrollArea;
         auto *container = new QWidget;
         auto *list = new QVBoxLayout(container);
@@ -2354,6 +3904,10 @@ private:
             list->addWidget(box);
             auto *detail = new QLabel((enabled ? t().active : t().disabled) + QStringLiteral(" · ")
                                       + localDescription(item) + QStringLiteral("\n")
+                                      + (language_->currentData().toString() == QStringLiteral("en")
+                                          ? (enabled ? QStringLiteral("Clear to disable this entry.") : QStringLiteral("Check to restore this entry."))
+                                          : (enabled ? QStringLiteral("取消勾选可禁用此项。") : QStringLiteral("勾选可还原此项。")))
+                                      + QStringLiteral("\n")
                                       + item.value(QStringLiteral("target")).toString());
             detail->setWordWrap(true);
             detail->setContentsMargins(26, 0, 0, 8);
@@ -2498,37 +4052,46 @@ private:
     {
         QStringList containerPaths;
         QStringList disableIds;
+        QStringList enableIds;
         for (const auto &pair : resultContainerBoxes_) {
             if (pair.second && pair.second->isChecked() && pair.second->isEnabled()) {
                 containerPaths << pair.first;
             }
         }
-        for (const auto &pair : resultAutostartBoxes_) {
-            if (pair.second && pair.second->isChecked()) {
-                disableIds << pair.first;
+        for (const AutostartSelectionRow &row : resultAutostartRows_) {
+            if (!row.box || !row.box->isChecked()) {
+                continue;
+            }
+            if (row.currentlyEnabled) {
+                disableIds << row.id;
+            } else {
+                enableIds << row.id;
             }
         }
         clearRows(planRows_);
-        if (containerPaths.isEmpty() && disableIds.isEmpty()) {
+        if (containerPaths.isEmpty() && disableIds.isEmpty() && enableIds.isEmpty()) {
             addPlanRow(t().planned, t().done, t().noCleanable);
+            showActionResultPage();
             return;
         }
         setBusy(true);
-        runSelectedAutostartOptimization(disableIds, containerPaths);
+        runSelectedAutostartOptimization(disableIds, enableIds, containerPaths);
     }
 
-    void runSelectedAutostartOptimization(const QStringList &disableIds, const QStringList &containerPaths)
+    void runSelectedAutostartOptimization(const QStringList &disableIds,
+                                          const QStringList &enableIds,
+                                          const QStringList &containerPaths)
     {
-        if (disableIds.isEmpty()) {
+        if (disableIds.isEmpty() && enableIds.isEmpty()) {
             runSelectedContainerCleanup(containerPaths);
             return;
         }
         addPlanRow(t().autostartOptimization, t().running, language_->currentData().toString() == QStringLiteral("en")
-            ? QStringLiteral("Disable %1 selected preheat/autostart entries.").arg(disableIds.size())
-            : QStringLiteral("禁用 %1 个选中的预热/自启动项。").arg(disableIds.size()));
+            ? QStringLiteral("Apply %1 disable and %2 restore autostart changes.").arg(disableIds.size()).arg(enableIds.size())
+            : QStringLiteral("应用 %1 个禁用、%2 个还原的自启动项变更。").arg(disableIds.size()).arg(enableIds.size()));
         runProcess({helper_, QStringLiteral("--manage-autostart"), QStringLiteral("--user"), user_,
                     QStringLiteral("--disable-entries"), disableIds.join(QLatin1Char(',')),
-                    QStringLiteral("--enable-entries"), QString()},
+                    QStringLiteral("--enable-entries"), enableIds.join(QLatin1Char(','))},
                    [this, containerPaths](int code, const QByteArray &output) {
             appendActionResult(t().autostartOptimization, code, output);
             runSelectedContainerCleanup(containerPaths);
@@ -2563,6 +4126,7 @@ private:
             addPlanRow(stage, text.failed, language_->currentData().toString() == QStringLiteral("en")
                 ? QStringLiteral("Operation failed. See the error dialog for the log path.")
                 : QStringLiteral("操作失败。错误日志位置见弹窗。"));
+            showActionResultPage();
             showErrorDialog(path);
             return;
         }
@@ -2582,6 +4146,7 @@ private:
             ? QStringLiteral("%1 succeeded, %2 failed, released %3.").arg(okCount).arg(failCount).arg(fmtBytes(released))
             : QStringLiteral("%1 项成功，%2 项失败，释放 %3。").arg(okCount).arg(failCount).arg(fmtBytes(released));
         addPlanRow(stage, failCount == 0 ? text.done : text.failed, summary);
+        showActionResultPage();
         if (failCount > 0) {
             const QString path = writeErrorLog(QStringLiteral("partial selected optimization failure"), output);
             showErrorDialog(path);
@@ -2591,6 +4156,7 @@ private:
     void finishSelectedOptimization()
     {
         setBusy(false);
+        showActionResultPage();
         scanInternal(false);
     }
 
@@ -2603,6 +4169,7 @@ private:
             addPlanRow(text.rawLog, text.failed, language_->currentData().toString() == QStringLiteral("en")
                 ? QStringLiteral("Action failed. See the error dialog for the log path.")
                 : QStringLiteral("操作失败。错误日志位置见弹窗。"));
+            showActionResultPage();
             showErrorDialog(path);
             setBusy(false);
             return;
@@ -2627,6 +4194,7 @@ private:
             showErrorDialog(path);
         }
         addPlanRow(text.planned, failCount == 0 ? text.done : text.failed, summary);
+        showActionResultPage();
         setBusy(false);
     }
 
@@ -2704,6 +4272,10 @@ private:
     bool draggingWindow_ = false;
     QPoint dragOffset_;
     QFrame *chrome_ = nullptr;
+    GlassShellFrame *appShell_ = nullptr;
+    QFrame *sideBar_ = nullptr;
+    QFrame *topBarFrame_ = nullptr;
+    QFrame *busyOverlay_ = nullptr;
     QLabel *chromeTitle_ = nullptr;
     QLabel *title_ = nullptr;
     QLabel *languageLabel_ = nullptr;
@@ -2716,6 +4288,7 @@ private:
     QComboBox *language_ = nullptr;
     QProgressBar *progress_ = nullptr;
     SpaceVisual *visual_ = nullptr;
+    SpaceVisual *resultVisual_ = nullptr;
     QTabWidget *tabs_ = nullptr;
     QStackedWidget *statusStack_ = nullptr;
     QStackedWidget *appsStack_ = nullptr;
@@ -2723,12 +4296,16 @@ private:
     QLabel *overallTitle_ = nullptr;
     QLabel *metricsTitle_ = nullptr;
     QLabel *metricsRelation_ = nullptr;
+    QLabel *rootDetailsTitle_ = nullptr;
     QLabel *appsTitle_ = nullptr;
     QLabel *appsRelation_ = nullptr;
     QLabel *detailTitle_ = nullptr;
     QLabel *actionsTitle_ = nullptr;
     QLabel *resultTitle_ = nullptr;
     QLabel *resultSummary_ = nullptr;
+    QLabel *selectionSummary_ = nullptr;
+    QWidget *resultSummaryCard_ = nullptr;
+    QWidget *planCard_ = nullptr;
     QLabel *planTitle_ = nullptr;
     QLabel *scanProgressTitle_ = nullptr;
     QLabel *scanProgressDetail_ = nullptr;
@@ -2737,6 +4314,7 @@ private:
     QWidget *detailList_ = nullptr;
     QWidget *planList_ = nullptr;
     QWidget *optimizationList_ = nullptr;
+    QScrollArea *optimizationScrollArea_ = nullptr;
     QChartView *metricsChartView_ = nullptr;
     QChart *metricsChart_ = nullptr;
     QPieSeries *metricsSeries_ = nullptr;
@@ -2751,27 +4329,47 @@ private:
     QTimer *scanProgressTimer_ = nullptr;
     int scanProgressValue_ = 0;
     QVector<QPair<QString, QCheckBox *>> resultContainerBoxes_;
-    QVector<QPair<QString, QCheckBox *>> resultAutostartBoxes_;
+    QVector<AutostartSelectionRow> resultAutostartRows_;
     QPushButton *heroScanButton_ = nullptr;
+    QPushButton *topScanButton_ = nullptr;
     QPushButton *statusNavButton_ = nullptr;
-    QPushButton *scanNavButton_ = nullptr;
+    QPushButton *appsNavButton_ = nullptr;
+    QPushButton *containersNavButton_ = nullptr;
+    QPushButton *autostartNavButton_ = nullptr;
     QPushButton *metricsPageButton_ = nullptr;
     QPushButton *appsPageButton_ = nullptr;
+    QPushButton *rootDetailsButton_ = nullptr;
+    QPushButton *rootDetailsBackButton_ = nullptr;
     QPushButton *backToAppsButton_ = nullptr;
     QPushButton *applyOptimizationsButton_ = nullptr;
     QPushButton *rescanButton_ = nullptr;
+    QPushButton *selectAllButton_ = nullptr;
+    QPushButton *clearSelectionButton_ = nullptr;
+    QPushButton *secondarySelectAllButton_ = nullptr;
+    QPushButton *secondaryClearSelectionButton_ = nullptr;
+    QPushButton *secondaryApplyButton_ = nullptr;
     QPushButton *scanButton_ = nullptr;
     QPushButton *cleanOldButton_ = nullptr;
     QPushButton *autostartButton_ = nullptr;
     QPushButton *minimizeButton_ = nullptr;
     QPushButton *maximizeButton_ = nullptr;
     QPushButton *closeButton_ = nullptr;
+    int activeNavIndex_ = 0;
+    int activeReviewFilter_ = 0;
+    bool autostartSelectionPageOpen_ = false;
 };
 
 int main(int argc, char **argv)
 {
+    QCoreApplication::setApplicationName(QStringLiteral("kylin-space-cleaner"));
     QApplication app(argc, argv);
+    QApplication::setDesktopFileName(QStringLiteral("kylin-space-cleaner"));
+    QIcon appIcon;
+    appIcon.addFile(QStringLiteral(":/icons/kylin-space-guard-256.png"), QSize(256, 256));
+    appIcon.addFile(QStringLiteral(":/icons/kylin-space-guard.svg"));
+    app.setWindowIcon(appIcon);
     CleanerWindow window;
+    window.setWindowIcon(appIcon);
     window.show();
     return app.exec();
 }

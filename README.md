@@ -79,7 +79,7 @@ Move old Kaiming application container versions to a DATA rollback quarantine:
 pkexec kylin-space-guard --apply --user "$USER" --clean-old-app-containers
 ```
 
-Disable Kaiming/KARE preheat and silent autostart entries for the current user:
+Disable Kaiming/KARE silent autostart entries for the current user:
 
 ```bash
 pkexec kylin-space-guard --apply --user "$USER" --disable-kaiming-autostart

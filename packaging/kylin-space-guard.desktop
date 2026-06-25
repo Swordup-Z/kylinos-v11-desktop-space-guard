@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=麒麟V11空间清理
+Name[zh]=麒麟V11空间清理
+Name[zh_CN]=麒麟V11空间清理
+Name[en_US]=KylinOS V11 Desktop Space Cleaner
+GenericName=KylinOS V11 Desktop Space Cleaner
+GenericName[zh_CN]=KylinOS V11 Desktop Space Cleaner
+GenericName[en_US]=KylinOS V11 Desktop Space Cleaner
+Comment=清理和抑制 Kaiming/KARE 与 ostree 的异常空间占用
+Comment[zh_CN]=清理和抑制 Kaiming/KARE 与 ostree 的异常空间占用
+Comment[en_US]=Clean and control Kaiming/KARE and ostree space usage on KylinOS Desktop V11
+Exec=kylin-space-cleaner
+Icon=kylin-space-cleaner
+StartupWMClass=kylin-space-cleaner
+Terminal=false
+Categories=System;Utility;
+Keywords=kylin;kylinos;v11;desktop;kaiming;kare;ostree;storage;cleanup;空间清理;麒麟;

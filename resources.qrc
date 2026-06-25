@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file alias="kylin-space-guard.svg">assets/kylin-space-guard.svg</file>
+        <file alias="kylin-space-guard-256.png">assets/kylin-space-guard-256.png</file>
+        <file alias="kylin-space-cleaner.svg">assets/kylin-space-guard.svg</file>
+        <file alias="kylin-space-cleaner-256.png">assets/kylin-space-guard-256.png</file>
+    </qresource>
+</RCC>

@@ -283,10 +283,10 @@ static QList<AutostartEntry> knownAutostarts()
          {QStringLiteral("/etc/xdg/autostart/kylin-note_autoStart.desktop"),
           QStringLiteral("/usr/etc/xdg/autostart/kylin-note_autoStart.desktop")}},
         {QStringLiteral("qaxbrowser-safe-preheat.desktop"),
-         QStringLiteral("奇安信浏览器预热"),
-         QStringLiteral("QaxBrowser preheat"),
-         QStringLiteral("登录后预热浏览器以换取启动速度，但会占用后台资源。"),
-         QStringLiteral("Preheats the browser after login, trading background resources for faster startup."),
+         QStringLiteral("奇安信浏览器自启动项"),
+         QStringLiteral("QaxBrowser autostart entry"),
+         QStringLiteral("登录后自动启动浏览器相关后台进程。禁用后不会卸载浏览器，只是不再自动启动。"),
+         QStringLiteral("Starts browser-related background processes after login. Disabling does not uninstall the browser."),
          {QStringLiteral("/etc/xdg/autostart/qaxbrowser-safe-preheat.desktop"),
           QStringLiteral("/usr/etc/xdg/autostart/qaxbrowser-safe-preheat.desktop")}},
         {QStringLiteral("dbus-daemon-proxy.desktop"),
@@ -397,6 +397,14 @@ static QJsonObject scan(const QString &user)
         return directChildDirsBytes(QStringLiteral("/opt/kare-applications"),
                                     {QStringLiteral("upper"), QStringLiteral("work")});
     });
+    auto kareBaseFuture = std::async(std::launch::async, [] {
+        return duBytes(QStringLiteral("/var/opt/kare-applications/base"));
+    });
+    auto appPayloadFuture = std::async(std::launch::async, [] {
+        return duBytes(QStringLiteral("/var/opt/kingsoft"))
+            + duBytes(QStringLiteral("/var/opt/apps"))
+            + duBytes(QStringLiteral("/var/opt/wechat"));
+    });
     auto oldContainersFuture = std::async(std::launch::async, oldContainerCandidates);
     auto autostartsFuture = std::async(std::launch::async, [user] {
         return autostartCandidates(user);
@@ -408,12 +416,16 @@ static QJsonObject scan(const QString &user)
     const qint64 kaiming = kaimingFuture.get();
     const qint64 ostreeUpper = ostreeFuture.get();
     const qint64 kareUpper = kareFuture.get();
-    const qint64 otherRoot = qMax<qint64>(0, rootUsed - kaiming - ostreeUpper - kareUpper);
+    const qint64 kareBase = kareBaseFuture.get();
+    const qint64 appPayload = appPayloadFuture.get();
+    const qint64 systemOther = qMax<qint64>(0, rootUsed - kaiming - ostreeUpper - kareUpper - kareBase - appPayload);
     metrics.insert(QStringLiteral("root_used"), QString::number(rootUsed));
     metrics.insert(QStringLiteral("kaiming"), QString::number(kaiming));
     metrics.insert(QStringLiteral("ostree_upper"), QString::number(ostreeUpper));
     metrics.insert(QStringLiteral("kare_upper"), QString::number(kareUpper));
-    metrics.insert(QStringLiteral("root_other"), QString::number(otherRoot));
+    metrics.insert(QStringLiteral("kare_base"), QString::number(kareBase));
+    metrics.insert(QStringLiteral("app_payload"), QString::number(appPayload));
+    metrics.insert(QStringLiteral("system_other"), QString::number(systemOther));
     root.insert(QStringLiteral("metrics"), metrics);
     root.insert(QStringLiteral("oldContainers"), oldContainersFuture.get());
     root.insert(QStringLiteral("autostarts"), autostartsFuture.get());

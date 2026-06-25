@@ -6,6 +6,7 @@ BIN_DIR=${BIN_DIR:-"$HOME/.local/bin"}
 APP_DIR=${APP_DIR:-"$HOME/.local/share/applications"}
 ICON_THEME=${ICON_THEME:-"$HOME/.local/share/icons/hicolor"}
 ICON_DIR=${ICON_DIR:-"$ICON_THEME/scalable/apps"}
+ICON_PNG_DIR=${ICON_PNG_DIR:-"$ICON_THEME/256x256/apps"}
 PIXMAP_DIR=${PIXMAP_DIR:-"$HOME/.local/share/pixmaps"}
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 BUILD_DIR=${BUILD_DIR:-"$ROOT_DIR/build"}
@@ -15,11 +16,17 @@ if command -v cmake >/dev/null 2>&1 && [ -f "$ROOT_DIR/CMakeLists.txt" ]; then
   cmake --build "$BUILD_DIR"
 fi
 
-install -d "$PREFIX/bin" "$PREFIX/gui" "$PREFIX/libexec" "$BIN_DIR" "$APP_DIR" "$ICON_DIR" "$PIXMAP_DIR"
+install -d "$PREFIX/bin" "$PREFIX/gui" "$PREFIX/libexec" "$BIN_DIR" "$APP_DIR" "$ICON_DIR" "$ICON_PNG_DIR" "$PIXMAP_DIR"
 install -m 0755 "$ROOT_DIR/bin/kylin-space-guard" "$PREFIX/bin/kylin-space-guard"
 install -m 0755 "$ROOT_DIR/gui/kylin-space-guard-gtk" "$PREFIX/gui/kylin-space-guard-gtk"
 install -m 0644 "$ROOT_DIR/assets/kylin-space-guard.svg" "$ICON_DIR/kylin-space-guard.svg"
+install -m 0644 "$ROOT_DIR/assets/kylin-space-guard.svg" "$ICON_DIR/kylin-space-cleaner.svg"
 install -m 0644 "$ROOT_DIR/assets/kylin-space-guard.svg" "$PIXMAP_DIR/kylin-space-guard.svg"
+install -m 0644 "$ROOT_DIR/assets/kylin-space-guard.svg" "$PIXMAP_DIR/kylin-space-cleaner.svg"
+if [ -f "$ROOT_DIR/assets/kylin-space-guard-256.png" ]; then
+  install -m 0644 "$ROOT_DIR/assets/kylin-space-guard-256.png" "$ICON_PNG_DIR/kylin-space-guard.png"
+  install -m 0644 "$ROOT_DIR/assets/kylin-space-guard-256.png" "$ICON_PNG_DIR/kylin-space-cleaner.png"
+fi
 if [ ! -f "$ICON_THEME/index.theme" ] && [ -f /usr/share/icons/hicolor/index.theme ]; then
   install -m 0644 /usr/share/icons/hicolor/index.theme "$ICON_THEME/index.theme"
 fi
@@ -35,7 +42,7 @@ if [ -x "$PREFIX/bin/kylin-space-cleaner" ]; then
   ln -sfn "$PREFIX/bin/kylin-space-cleaner" "$BIN_DIR/kylin-space-cleaner"
 fi
 
-cat >"$APP_DIR/kylin-space-guard.desktop" <<EOF
+cat >"$APP_DIR/kylin-space-cleaner.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=麒麟V11空间清理
@@ -49,15 +56,19 @@ Comment=清理和抑制 Kaiming/KARE 与 ostree 的异常空间占用
 Comment[zh_CN]=清理和抑制 Kaiming/KARE 与 ostree 的异常空间占用
 Comment[en_US]=Clean and control Kaiming/KARE and ostree space usage on KylinOS Desktop V11
 Exec=$PREFIX/bin/kylin-space-cleaner
-Icon=kylin-space-guard
+Icon=kylin-space-cleaner
+StartupWMClass=kylin-space-cleaner
 Terminal=false
 Categories=System;
 Keywords=kylin;kylinos;v11;desktop;kaiming;kare;ostree;storage;cleanup;空间清理;麒麟;
 EOF
+cp "$APP_DIR/kylin-space-cleaner.desktop" "$APP_DIR/kylin-space-guard.desktop"
+
+gtk-update-icon-cache -q "$ICON_THEME" >/dev/null 2>&1 || true
 
 echo "Installed 麒麟V11空间清理 / KylinOS V11 Desktop Space Cleaner"
 echo "GUI: $PREFIX/bin/kylin-space-cleaner"
 echo "Helper: $PREFIX/bin/kylin-space-cleaner-helper"
 echo "CLI: $PREFIX/bin/kylin-space-guard"
-echo "Desktop entry: $APP_DIR/kylin-space-guard.desktop"
-echo "Icon: $ICON_DIR/kylin-space-guard.svg"
+echo "Desktop entry: $APP_DIR/kylin-space-cleaner.desktop"
+echo "Icon: $ICON_DIR/kylin-space-cleaner.svg"
