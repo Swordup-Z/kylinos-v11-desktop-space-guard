@@ -2834,7 +2834,7 @@ private:
         auto *content = new QWidget;
         content->setObjectName(QStringLiteral("CardList"));
         auto *layout = new QVBoxLayout(content);
-        layout->setContentsMargins(2, 2, 2, 16);
+        layout->setContentsMargins(2, 2, 2, 28);
         layout->setSpacing(8);
         scroll->setWidget(content);
         *rows = layout;
@@ -3251,12 +3251,7 @@ private:
             .arg(enabled ? text.active : text.disabled,
                  localDescription(item),
                  item.value(QStringLiteral("target")).toString());
-        auto showDetails = [this, item, detail]() {
-            QMessageBox box(QMessageBox::Information, localName(item), detail, QMessageBox::NoButton, this);
-            box.setStyleSheet(styleSheet());
-            box.addButton(t().ok, QMessageBox::AcceptRole);
-            box.exec();
-        };
+        auto showDetails = [this, item]() { showAutostartDetailPage(item); };
         connect(detailButton, &QPushButton::clicked, this, showDetails);
         connect(row, &ClickableCardFrame::clicked, this, showDetails);
         connect(row, &QWidget::customContextMenuRequested, this, [this, row, item, detail, detailText, showDetails](const QPoint &pos) {
@@ -3323,10 +3318,10 @@ private:
         auto *row = new CardFrame;
         row->setObjectName(QStringLiteral("ContainerRow"));
         row->setInteractive(false);
-        row->setMinimumHeight(260);
+        row->setMinimumHeight(286);
         auto *layout = new QVBoxLayout(row);
-        layout->setContentsMargins(18, 14, 18, 14);
-        layout->setSpacing(12);
+        layout->setContentsMargins(18, 14, 18, 18);
+        layout->setSpacing(10);
 
         const bool english = language_->currentData().toString() == QStringLiteral("en");
         const QString title = QStringLiteral("%1 · %2").arg(english
@@ -3375,6 +3370,66 @@ private:
         pathLayout->addWidget(makeLabel(t().path, QStringLiteral("PillLabel")));
         pathLayout->addWidget(makeLabel(item.value(QStringLiteral("path")).toString(), QStringLiteral("PathValue")));
         layout->addWidget(pathFrame);
+        return row;
+    }
+
+    CardFrame *createAutostartDetailCard(const QJsonObject &item,
+                                         const QString &currentLabel,
+                                         const QString &actionLabel,
+                                         const QString &nextLabel)
+    {
+        auto *row = new CardFrame;
+        row->setObjectName(QStringLiteral("ContainerRow"));
+        row->setInteractive(false);
+        row->setMinimumHeight(260);
+        auto *layout = new QVBoxLayout(row);
+        layout->setContentsMargins(18, 14, 18, 14);
+        layout->setSpacing(12);
+
+        const bool english = language_->currentData().toString() == QStringLiteral("en");
+        layout->addWidget(makeLabel(localName(item), QStringLiteral("ContainerTitle")));
+
+        auto *firstRow = new QHBoxLayout;
+        firstRow->setSpacing(10);
+        firstRow->addWidget(createValuePill(t().status, currentLabel, true), 1);
+        firstRow->addWidget(createValuePill(english ? QStringLiteral("Selected action") : QStringLiteral("选中后"),
+                                            actionLabel,
+                                            true),
+                            1);
+        layout->addLayout(firstRow);
+
+        auto *effectFrame = new QFrame;
+        effectFrame->setObjectName(QStringLiteral("PathPill"));
+        auto *effectLayout = new QVBoxLayout(effectFrame);
+        effectLayout->setContentsMargins(12, 8, 12, 8);
+        effectLayout->setSpacing(5);
+        effectLayout->addWidget(makeLabel(english ? QStringLiteral("Action effect") : QStringLiteral("动作说明"),
+                                          QStringLiteral("PillLabel")));
+        effectLayout->addWidget(makeLabel(nextLabel, QStringLiteral("PathValue")));
+        auto *descriptionFrame = new QFrame;
+        descriptionFrame->setObjectName(QStringLiteral("PathPill"));
+        auto *descriptionLayout = new QVBoxLayout(descriptionFrame);
+        descriptionLayout->setContentsMargins(12, 8, 12, 8);
+        descriptionLayout->setSpacing(5);
+        descriptionLayout->addWidget(makeLabel(english ? QStringLiteral("Startup item information") : QStringLiteral("启动项信息"),
+                                               QStringLiteral("PillLabel")));
+        descriptionLayout->addWidget(makeLabel(localDescription(item), QStringLiteral("PathValue")));
+
+        auto *detailRow = new QHBoxLayout;
+        detailRow->setSpacing(10);
+        detailRow->addWidget(effectFrame, 1);
+        detailRow->addWidget(descriptionFrame, 1);
+        layout->addLayout(detailRow);
+
+        auto *targetFrame = new QFrame;
+        targetFrame->setObjectName(QStringLiteral("PathPill"));
+        auto *targetLayout = new QVBoxLayout(targetFrame);
+        targetLayout->setContentsMargins(12, 8, 12, 8);
+        targetLayout->setSpacing(5);
+        targetLayout->addWidget(makeLabel(english ? QStringLiteral("Desktop entry path") : QStringLiteral("启动项文件位置"),
+                                          QStringLiteral("PillLabel")));
+        targetLayout->addWidget(makeLabel(item.value(QStringLiteral("target")).toString(), QStringLiteral("PathValue")));
+        layout->addWidget(targetFrame);
         return row;
     }
 
@@ -3453,7 +3508,8 @@ private:
                                                  const QString &title,
                                                  const QString &currentLabel,
                                                  const QString &actionLabel,
-                                                 const QString &detail)
+                                                 const QString &detail,
+                                                 const std::function<void()> &showDetails)
     {
         auto *row = new ClickableCardFrame;
         row->setObjectName(QStringLiteral("AutostartActionRow"));
@@ -3490,12 +3546,6 @@ private:
         applyButtonMetrics(detailButton, kAutostartDetailButtonWidth, true, kAutostartRowControlHeight);
         layout->addWidget(detailButton, 0, Qt::AlignVCenter);
 
-        auto showDetails = [this, title, detail]() {
-            QMessageBox box(QMessageBox::Information, title, detail, QMessageBox::NoButton, this);
-            box.setStyleSheet(styleSheet());
-            box.addButton(t().ok, QMessageBox::AcceptRole);
-            box.exec();
-        };
         connect(detailButton, &QPushButton::clicked, this, showDetails);
         connect(row, &ClickableCardFrame::clicked, this, [box]() {
             if (box->isEnabled()) {
@@ -3950,6 +4000,26 @@ private:
             showContainerSelectionPage();
         } else if (pageMode == 2 && filter == 2) {
             showAutostartSelectionPage();
+        } else if (pageMode == 3 && filter == 1) {
+            const QJsonArray entries = state_.value(QStringLiteral("cleanupCandidates")).toArray();
+            for (const QJsonValue &value : entries) {
+                const QJsonObject item = value.toObject();
+                if (item.value(QStringLiteral("id")).toString() == activeReviewDetailId_) {
+                    showCleanupCandidateDetailPage(item);
+                    return;
+                }
+            }
+            showContainerSelectionPage();
+        } else if (pageMode == 4 && filter == 2) {
+            const QJsonArray entries = state_.value(QStringLiteral("autostarts")).toArray();
+            for (const QJsonValue &value : entries) {
+                const QJsonObject item = value.toObject();
+                if (item.value(QStringLiteral("id")).toString() == activeReviewDetailId_) {
+                    showAutostartDetailPage(item);
+                    return;
+                }
+            }
+            showAutostartSelectionPage();
         } else {
             showScanResults(filter);
         }
@@ -4001,6 +4071,7 @@ private:
             activeReviewFilter_ = filter;
         }
         activeReviewPageMode_ = 0;
+        activeReviewDetailId_.clear();
         const Text text = t();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
@@ -4124,6 +4195,7 @@ private:
     {
         const Text text = t();
         activeReviewPageMode_ = 1;
+        activeReviewDetailId_.clear();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
         clearRows(optimizationRows_);
@@ -4208,6 +4280,7 @@ private:
     void showCleanupCandidateDetailPage(const QJsonObject &item)
     {
         activeReviewPageMode_ = 3;
+        activeReviewDetailId_ = item.value(QStringLiteral("id")).toString();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
         clearRows(optimizationRows_);
@@ -4224,7 +4297,7 @@ private:
             secondaryToolbarHost_->hide();
         }
         if (optimizationScrollArea_) {
-            optimizationScrollArea_->setMinimumHeight(430);
+            optimizationScrollArea_->setMinimumHeight(330);
             optimizationScrollArea_->setMaximumHeight(QWIDGETSIZE_MAX);
         }
         if (resultTitle_) {
@@ -4237,8 +4310,65 @@ private:
                                                          ? QStringLiteral("Back to cleanup list")
                                                          : QStringLiteral("返回清理列表"),
                                                      [this]() { showContainerSelectionPage(); },
-                                                     QStyle::SP_ArrowBack));
+                                                     QStyle::SP_ArrowBack,
+                                                     48));
         addOptimizationCard(createCleanupCandidateDetailCard(item));
+
+        if (scanStack_) {
+            scanStack_->setCurrentIndex(2);
+            fadeIn(scanStack_->currentWidget());
+        }
+    }
+
+    void showAutostartDetailPage(const QJsonObject &item)
+    {
+        activeReviewPageMode_ = 4;
+        activeReviewDetailId_ = item.value(QStringLiteral("id")).toString();
+        resultContainerBoxes_.clear();
+        resultAutostartRows_.clear();
+        clearRows(optimizationRows_);
+        secondarySelectAllButton_ = nullptr;
+        secondaryClearSelectionButton_ = nullptr;
+        secondaryApplyButton_ = nullptr;
+        clearSecondaryToolbar();
+        clearRows(planRows_);
+        setOptimizationActionControlsVisible(false);
+        if (resultSummaryCard_) {
+            resultSummaryCard_->hide();
+        }
+        if (secondaryToolbarHost_) {
+            secondaryToolbarHost_->hide();
+        }
+        if (optimizationScrollArea_) {
+            optimizationScrollArea_->setMinimumHeight(330);
+            optimizationScrollArea_->setMaximumHeight(QWIDGETSIZE_MAX);
+        }
+        if (resultTitle_) {
+            resultTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("Autostart Details")
+                : QStringLiteral("自启动项详情"));
+        }
+
+        const bool currentlyEnabled = !item.value(QStringLiteral("disabled")).toBool();
+        const QString actionLabel = language_->currentData().toString() == QStringLiteral("en")
+            ? (currentlyEnabled ? QStringLiteral("Disable") : QStringLiteral("Restore"))
+            : (currentlyEnabled ? QStringLiteral("禁用") : QStringLiteral("还原"));
+        const QString currentLabel = currentlyEnabled ? t().active : t().disabled;
+        const QString nextLabel = language_->currentData().toString() == QStringLiteral("en")
+            ? (currentlyEnabled
+                ? QStringLiteral("Write a user Hidden=true override to stop this item from starting at login.")
+                : QStringLiteral("Remove the user override so this entry inherits the system autostart rule again."))
+            : (currentlyEnabled
+                ? QStringLiteral("写入用户级 Hidden=true 覆盖，停止该项目登录自启动。")
+                : QStringLiteral("移除用户级覆盖，恢复继承系统自启动规则。"));
+
+        addOptimizationCard(createFullWidthButtonRow(language_->currentData().toString() == QStringLiteral("en")
+                                                         ? QStringLiteral("Back to autostart list")
+                                                         : QStringLiteral("返回自启动项列表"),
+                                                     [this]() { showAutostartSelectionPage(); },
+                                                     QStyle::SP_ArrowBack,
+                                                     48));
+        addOptimizationCard(createAutostartDetailCard(item, currentLabel, actionLabel, nextLabel));
 
         if (scanStack_) {
             scanStack_->setCurrentIndex(2);
@@ -4250,6 +4380,7 @@ private:
     {
         const Text text = t();
         activeReviewPageMode_ = 2;
+        activeReviewDetailId_.clear();
         resultContainerBoxes_.clear();
         resultAutostartRows_.clear();
         clearRows(optimizationRows_);
@@ -4306,7 +4437,8 @@ private:
                                                          localName(item),
                                                          currentLabel,
                                                          actionLabel,
-                                                         detail));
+                                                         detail,
+                                                         [this, item]() { showAutostartDetailPage(item); }));
             resultAutostartRows_.append({item.value(QStringLiteral("id")).toString(), currentlyEnabled, box});
         }
 
@@ -5295,6 +5427,7 @@ private:
     int activeNavIndex_ = 0;
     int activeReviewFilter_ = 0;
     int activeReviewPageMode_ = 0;
+    QString activeReviewDetailId_;
 };
 
 int main(int argc, char **argv)
