@@ -1168,10 +1168,10 @@ private:
             QStringLiteral("容器数"),
             QStringLiteral("总占用"),
             QStringLiteral("容器明细"),
-            QStringLiteral("信息类型"),
+            QStringLiteral("文件类别信息"),
             QStringLiteral("版本"),
-            QStringLiteral("系统路径"),
-            QStringLiteral("当前引用"),
+            QStringLiteral("文件位置信息"),
+            QStringLiteral("当前版本使用"),
             QStringLiteral("正在使用"),
             QStringLiteral("应用容器统计"),
             QStringLiteral("应用数"),
@@ -1258,10 +1258,10 @@ private:
             QStringLiteral("Containers"),
             QStringLiteral("Total Size"),
             QStringLiteral("Container Details"),
-            QStringLiteral("Info Type"),
+            QStringLiteral("File Info Type"),
             QStringLiteral("Version"),
-            QStringLiteral("System Path"),
-            QStringLiteral("Current"),
+            QStringLiteral("File Location Info"),
+            QStringLiteral("Used by Current Version"),
             QStringLiteral("In Use"),
             QStringLiteral("Application Container Summary"),
             QStringLiteral("Applications"),
@@ -3543,10 +3543,10 @@ private:
     {
         const bool english = language_->currentData().toString() == QStringLiteral("en");
         if (module == QStringLiteral("binary")) {
-            return english ? QStringLiteral("App file info") : QStringLiteral("应用文件信息");
+            return english ? QStringLiteral("Application file info") : QStringLiteral("应用文件信息");
         }
         if (module == QStringLiteral("runtime")) {
-            return english ? QStringLiteral("Runtime info") : QStringLiteral("运行环境信息");
+            return english ? QStringLiteral("Runtime file info") : QStringLiteral("运行环境信息");
         }
         if (module == QStringLiteral("base")) {
             return english ? QStringLiteral("Base file info") : QStringLiteral("基础文件信息");
