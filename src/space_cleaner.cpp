@@ -1102,7 +1102,7 @@ private:
             QString(),
             QStringLiteral("扫描"),
             QStringLiteral("开始扫描"),
-            QStringLiteral("清理旧容器"),
+            QStringLiteral("KARE/Kaiming 清理"),
             QStringLiteral("管理自启动项"),
             QStringLiteral("正在扫描"),
             QStringLiteral("正在读取系统空间、Kaiming 容器和启动项状态"),
@@ -1110,7 +1110,7 @@ private:
             QStringLiteral("执行选中优化"),
             QStringLiteral("重新扫描"),
             QStringLiteral("可优化条目"),
-            QStringLiteral("旧版本容器清理"),
+            QStringLiteral("KARE/Kaiming 清理"),
             QStringLiteral("自启动项"),
             QStringLiteral("项目"),
             QStringLiteral("当前占用"),
@@ -1137,9 +1137,9 @@ private:
             QStringLiteral("失败"),
             QStringLiteral("计划"),
             QStringLiteral("管理自启动项"),
-            QStringLiteral("选择要清理的旧版本容器"),
+            QStringLiteral("选择要清理的运行环境项目"),
             QStringLiteral("当前没有发现可管理的自启动项。"),
-            QStringLiteral("当前没有发现可安全清理的旧版本容器。"),
+            QStringLiteral("当前没有发现可安全清理的 KARE/Kaiming 项目。"),
             QStringLiteral("错误"),
             QStringLiteral("当前状态"),
             QStringLiteral("正在更新"),
@@ -1192,7 +1192,7 @@ private:
             QString(),
             QStringLiteral("Scan"),
             QStringLiteral("Start Scan"),
-            QStringLiteral("Clean Old Containers"),
+            QStringLiteral("Clean KARE/Kaiming"),
             QStringLiteral("Manage Autostart Entries"),
             QStringLiteral("Scanning"),
             QStringLiteral("Reading system usage, Kaiming containers, and startup entries"),
@@ -1200,7 +1200,7 @@ private:
             QStringLiteral("Optimize Selected"),
             QStringLiteral("Rescan"),
             QStringLiteral("Optimization Items"),
-            QStringLiteral("Old Container Cleanup"),
+            QStringLiteral("KARE/Kaiming Cleanup"),
             QStringLiteral("Autostart Entries"),
             QStringLiteral("Item"),
             QStringLiteral("Current Usage"),
@@ -1227,9 +1227,9 @@ private:
             QStringLiteral("Failed"),
             QStringLiteral("Plan"),
             QStringLiteral("Manage autostart entries"),
-            QStringLiteral("Select old container versions to clean"),
+            QStringLiteral("Select runtime cleanup items"),
             QStringLiteral("No manageable autostart entries were found."),
-            QStringLiteral("No safely cleanable old container versions were found."),
+            QStringLiteral("No safely cleanable KARE/Kaiming items were found."),
             QStringLiteral("Error"),
             QStringLiteral("Current Status"),
             QStringLiteral("Updating"),
@@ -1918,8 +1918,8 @@ private:
         taskGrid->setContentsMargins(0, 0, 0, 0);
         taskGrid->setHorizontalSpacing(12);
         taskGrid->setVerticalSpacing(12);
-        taskGrid->addWidget(makeSmartTask(QStringLiteral("Kaiming 旧版本容器"),
-                                          QStringLiteral("选择可安全回收的旧层版本")), 0, 0);
+        taskGrid->addWidget(makeSmartTask(QStringLiteral("KARE/Kaiming 清理"),
+                                          QStringLiteral("缓存和旧版本进入回滚隔离区")), 0, 0);
         taskGrid->addWidget(makeSmartTask(QStringLiteral("自启动项"),
                                           QStringLiteral("逐项关闭可优化的启动项")), 0, 1);
         taskGrid->addWidget(makeSmartTask(QStringLiteral("应用容器占用"),
@@ -2406,6 +2406,9 @@ private:
             QFrame#SmartSummaryCard QCheckBox {
                 color: #ffffff;
             }
+            QFrame#OptimizationTaskRow QCheckBox:disabled {
+                color: rgba(255, 255, 255, 0.62);
+            }
             QCheckBox::indicator {
                 width: 18px;
                 height: 18px;
@@ -2418,8 +2421,8 @@ private:
                 border-color: #42ebd5;
             }
             QCheckBox::indicator:disabled {
-                background: #eef2f6;
-                border-color: #d9dfe7;
+                background: rgba(255, 255, 255, 0.06);
+                border-color: rgba(255, 255, 255, 0.22);
             }
             QCheckBox#TaskCheckBox {
                 font-size: 14px;
@@ -3792,7 +3795,7 @@ private:
 
     QString scanSummary() const
     {
-        const int containers = state_.value(QStringLiteral("oldContainers")).toArray().size();
+        const int containers = state_.value(QStringLiteral("cleanupCandidates")).toArray().size();
         int activeAutostarts = 0;
         for (const QJsonValue &value : state_.value(QStringLiteral("autostarts")).toArray()) {
             if (!value.toObject().value(QStringLiteral("disabled")).toBool()) {
@@ -3800,9 +3803,9 @@ private:
             }
         }
         if (language_->currentData().toString() == QStringLiteral("en")) {
-            return QStringLiteral("%1 old containers, %2 active autostart entries.").arg(containers).arg(activeAutostarts);
+            return QStringLiteral("%1 cleanup candidates, %2 active autostart entries.").arg(containers).arg(activeAutostarts);
         }
-        return QStringLiteral("发现 %1 个旧容器候选，%2 个仍启用的自启动项。").arg(containers).arg(activeAutostarts);
+        return QStringLiteral("发现 %1 个清理候选，%2 个仍启用的自启动项。").arg(containers).arg(activeAutostarts);
     }
 
     void addOptimizationCard(CardFrame *card)
@@ -3846,7 +3849,7 @@ private:
         clearSecondaryToolbar();
         clearRows(planRows_);
 
-        const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
+        const QJsonArray containers = state_.value(QStringLiteral("cleanupCandidates")).toArray();
         const QJsonArray autostarts = state_.value(QStringLiteral("autostarts")).toArray();
         int selectableContainers = 0;
         int selectableAutostarts = 0;
@@ -3865,7 +3868,7 @@ private:
             int inUseContainers = 0;
             for (const QJsonValue &value : containers) {
                 const QJsonObject item = value.toObject();
-                const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
+                const bool selectable = item.value(QStringLiteral("cleanable")).toBool();
                 if (selectable) {
                     ++selectableContainers;
                     selectableBytes += jsonInt64(item, QStringLiteral("bytes"));
@@ -3881,8 +3884,8 @@ private:
             } else {
                 addOptimizationCard(createStatusCardRow(statusCardTitle,
                                                         {language_->currentData().toString() == QStringLiteral("en")
-                                                             ? QStringLiteral("Old Containers")
-                                                             : QStringLiteral("旧容器数"),
+                                                             ? QStringLiteral("Cleanup Items")
+                                                             : QStringLiteral("清理项"),
                                                          text.cleanable,
                                                          text.inUse},
                                                         {QString::number(containers.size()),
@@ -3890,8 +3893,8 @@ private:
                                                          QString::number(inUseContainers)}));
             }
             addOptimizationCard(createLargeNavigationButtonRow(language_->currentData().toString() == QStringLiteral("en")
-                                                                   ? QStringLiteral("Open old container list")
-                                                                   : QStringLiteral("进入旧版本容器列表"),
+                                                                   ? QStringLiteral("Open KARE/Kaiming list")
+                                                                   : QStringLiteral("进入 KARE/Kaiming 列表"),
                                                                [this]() { showContainerSelectionPage(); }));
         }
 
@@ -3967,8 +3970,8 @@ private:
 
         if (resultTitle_) {
             resultTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("Old Containers")
-                : QStringLiteral("旧版本容器列表"));
+                ? QStringLiteral("KARE/Kaiming Cleanup")
+                : QStringLiteral("KARE/Kaiming 清理列表"));
         }
         setSecondarySelectionLayout(true);
 
@@ -3978,7 +3981,7 @@ private:
                                                      [this]() { showScanResults(activeReviewFilter_); },
                                                      QStyle::SP_ArrowBack));
 
-        const QJsonArray containers = state_.value(QStringLiteral("oldContainers")).toArray();
+        const QJsonArray containers = state_.value(QStringLiteral("cleanupCandidates")).toArray();
         if (containers.isEmpty()) {
             addOptimizationCard(createInfoRow(text.containerCleanup, {text.status}, {text.noContainers}));
         }
@@ -3987,35 +3990,38 @@ private:
         for (const QJsonValue &value : containers) {
             const QJsonObject item = value.toObject();
             auto *box = new QCheckBox;
-            const bool selectable = !item.value(QStringLiteral("inUse")).toBool();
+            const bool selectable = item.value(QStringLiteral("cleanable")).toBool();
             box->setChecked(false);
             box->setEnabled(selectable);
             if (selectable) {
                 ++selectableContainers;
             }
             connect(box, &QCheckBox::toggled, this, &CleanerWindow::updateOptimizationSelectionState);
-            const QString title = QStringLiteral("%1 / %2 / %3").arg(item.value(QStringLiteral("ref")).toString(),
-                                                                     item.value(QStringLiteral("module")).toString(),
-                                                                     item.value(QStringLiteral("version")).toString());
+            const bool english = language_->currentData().toString() == QStringLiteral("en");
+            const QString title = QStringLiteral("%1 · %2").arg(english
+                                                                     ? item.value(QStringLiteral("kindEn")).toString()
+                                                                     : item.value(QStringLiteral("kindZh")).toString(),
+                                                                 item.value(QStringLiteral("scope")).toString());
             const QString detail = selectable
-                ? QStringLiteral("%1\n%2").arg(item.value(QStringLiteral("kind")).toString(),
+                ? QStringLiteral("%1\n%2").arg(english
+                                                   ? item.value(QStringLiteral("reasonEn")).toString()
+                                                   : item.value(QStringLiteral("reasonZh")).toString(),
                                                item.value(QStringLiteral("path")).toString())
-                : QStringLiteral("%1\n%2\n%3").arg(item.value(QStringLiteral("kind")).toString(),
-                                                   item.value(QStringLiteral("path")).toString(),
-                                                   language_->currentData().toString() == QStringLiteral("en")
-                                                       ? QStringLiteral("Mounted or in use; this item cannot be selected safely.")
-                                                       : QStringLiteral("当前已挂载或正在使用，不能安全选择。"));
+                : QStringLiteral("%1\n%2").arg(english
+                                                   ? item.value(QStringLiteral("reasonEn")).toString()
+                                                   : item.value(QStringLiteral("reasonZh")).toString(),
+                                               item.value(QStringLiteral("path")).toString());
             addOptimizationCard(createOptimizationRow(box,
                                                       title,
                                                       detail,
                                                       fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
-            resultContainerBoxes_.append({item.value(QStringLiteral("path")).toString(), box});
+            resultContainerBoxes_.append({item.value(QStringLiteral("id")).toString(), box});
         }
 
         if (secondaryToolbarLayout_ && selectableContainers > 0) {
             secondaryToolbarLayout_->addWidget(createSecondaryOptimizationToolbar(language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("Select old containers, then move them to the rollback quarantine.")
-                : QStringLiteral("选择旧版本容器后，执行移动到回滚隔离区的清理操作。")));
+                ? QStringLiteral("Select safe KARE/Kaiming items, then move them to the rollback quarantine.")
+                : QStringLiteral("选择安全的 KARE/Kaiming 项目后，移动到 DATA 回滚隔离区。")));
         }
 
         if (resultSummary_) {
@@ -4023,8 +4029,8 @@ private:
         }
         if (selectionSummary_) {
             selectionSummary_->setText(language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("Choose old containers to clean from the secondary list.")
-                : QStringLiteral("在二级列表中选择要清理的旧版本容器。"));
+                ? QStringLiteral("Choose KARE/Kaiming cleanup items from the secondary list.")
+                : QStringLiteral("在二级列表中选择要清理的 KARE/Kaiming 项目。"));
         }
         updateOptimizationSelectionState();
         if (scanStack_) {
@@ -4114,11 +4120,11 @@ private:
         }
     }
 
-    qint64 oldContainerBytesForPath(const QString &path) const
+    qint64 cleanupCandidateBytesForId(const QString &id) const
     {
-        for (const QJsonValue &value : state_.value(QStringLiteral("oldContainers")).toArray()) {
+        for (const QJsonValue &value : state_.value(QStringLiteral("cleanupCandidates")).toArray()) {
             const QJsonObject item = value.toObject();
-            if (item.value(QStringLiteral("path")).toString() == path) {
+            if (item.value(QStringLiteral("id")).toString() == id) {
                 return jsonInt64(item, QStringLiteral("bytes"));
             }
         }
@@ -4142,7 +4148,7 @@ private:
             ++availableContainers;
             if (pair.second->isChecked()) {
                 ++selectedContainers;
-                selectedBytes += oldContainerBytesForPath(pair.first);
+                selectedBytes += cleanupCandidateBytesForId(pair.first);
             }
         }
         for (const AutostartSelectionRow &row : resultAutostartRows_) {
@@ -4162,14 +4168,14 @@ private:
 
         if (selectionSummary_) {
             selectionSummary_->setText(language_->currentData().toString() == QStringLiteral("en")
-                ? QStringLiteral("Selected %1 old containers (%2), %3 disable changes, and %4 restore changes. Available: %5 containers, %6 entries.")
+                ? QStringLiteral("Selected %1 cleanup items (%2), %3 disable changes, and %4 restore changes. Available: %5 cleanup items, %6 entries.")
                       .arg(selectedContainers)
                       .arg(fmtBytes(selectedBytes))
                       .arg(selectedAutostartDisables)
                       .arg(selectedAutostartRestores)
                       .arg(availableContainers)
                       .arg(availableAutostarts)
-                : QStringLiteral("已选择 %1 个旧版本容器（%2）、%3 个禁用变更、%4 个还原变更。可选：%5 个容器、%6 个启动项。")
+                : QStringLiteral("已选择 %1 个清理项（%2）、%3 个禁用变更、%4 个还原变更。可选：%5 个清理项、%6 个启动项。")
                       .arg(selectedContainers)
                       .arg(fmtBytes(selectedBytes))
                       .arg(selectedAutostartDisables)
@@ -4217,7 +4223,7 @@ private:
             resultSummaryCard_->setVisible(!secondary);
         }
         if (optimizationScrollArea_) {
-            optimizationScrollArea_->setMinimumHeight(secondary ? 470 : 430);
+            optimizationScrollArea_->setMinimumHeight(secondary ? 340 : 430);
         }
         if (secondaryToolbarHost_) {
             secondaryToolbarHost_->setVisible(secondary);
@@ -4292,7 +4298,7 @@ private:
             overallRows_->addStretch(1);
         }
         updateMetricChart(names, values, rootValue);
-        const qint64 oldContainerBytes = oldContainersBytes();
+        const qint64 oldContainerBytes = cleanupCandidatesBytes();
         clearRows(metricsRows_);
         for (int row = 0; row < keys.size(); ++row) {
             const qint64 value = values.at(row);
@@ -4539,11 +4545,14 @@ private:
         }
     }
 
-    qint64 oldContainersBytes() const
+    qint64 cleanupCandidatesBytes() const
     {
         qint64 total = 0;
-        for (const QJsonValue &value : state_.value(QStringLiteral("oldContainers")).toArray()) {
-            total += jsonInt64(value.toObject(), QStringLiteral("bytes"));
+        for (const QJsonValue &value : state_.value(QStringLiteral("cleanupCandidates")).toArray()) {
+            const QJsonObject item = value.toObject();
+            if (item.value(QStringLiteral("cleanable")).toBool()) {
+                total += jsonInt64(item, QStringLiteral("bytes"));
+            }
         }
         return total;
     }
@@ -4742,16 +4751,16 @@ private:
         });
     }
 
-    void applyOldContainers(const QStringList &paths)
+    void applyOldContainers(const QStringList &ids)
     {
-        QStringList command{QStringLiteral("pkexec"), helper_, QStringLiteral("--apply-old-containers")};
-        for (const QString &path : paths) {
-            command << QStringLiteral("--container") << path;
+        QStringList command{QStringLiteral("pkexec"), helper_, QStringLiteral("--apply-cleanup-candidates")};
+        for (const QString &id : ids) {
+            command << QStringLiteral("--cleanup-id") << id;
         }
         setBusy(true);
         addPlanRow(t().planned, t().running, language_->currentData().toString() == QStringLiteral("en")
-            ? QStringLiteral("Move %1 old containers to DATA rollback quarantine.").arg(paths.size())
-            : QStringLiteral("移动 %1 个旧容器到 DATA 回滚隔离区。").arg(paths.size()));
+            ? QStringLiteral("Move %1 cleanup items to DATA rollback quarantine.").arg(ids.size())
+            : QStringLiteral("移动 %1 个清理项到 DATA 回滚隔离区。").arg(ids.size()));
         runProcess(command, [this](int code, const QByteArray &output) {
             handleActionResult(code, output);
         });
@@ -4759,12 +4768,12 @@ private:
 
     void applySelectedOptimizations()
     {
-        QStringList containerPaths;
+        QStringList cleanupIds;
         QStringList disableIds;
         QStringList enableIds;
         for (const auto &pair : resultContainerBoxes_) {
             if (pair.second && pair.second->isChecked() && pair.second->isEnabled()) {
-                containerPaths << pair.first;
+                cleanupIds << pair.first;
             }
         }
         for (const AutostartSelectionRow &row : resultAutostartRows_) {
@@ -4778,21 +4787,21 @@ private:
             }
         }
         clearRows(planRows_);
-        if (containerPaths.isEmpty() && disableIds.isEmpty() && enableIds.isEmpty()) {
+        if (cleanupIds.isEmpty() && disableIds.isEmpty() && enableIds.isEmpty()) {
             addPlanRow(t().planned, t().done, t().noCleanable);
             showActionResultPage();
             return;
         }
         setBusy(true);
-        runSelectedAutostartOptimization(disableIds, enableIds, containerPaths);
+        runSelectedAutostartOptimization(disableIds, enableIds, cleanupIds);
     }
 
     void runSelectedAutostartOptimization(const QStringList &disableIds,
                                           const QStringList &enableIds,
-                                          const QStringList &containerPaths)
+                                          const QStringList &cleanupIds)
     {
         if (disableIds.isEmpty() && enableIds.isEmpty()) {
-            runSelectedContainerCleanup(containerPaths);
+            runSelectedContainerCleanup(cleanupIds);
             return;
         }
         addPlanRow(t().autostartOptimization, t().running, language_->currentData().toString() == QStringLiteral("en")
@@ -4801,25 +4810,25 @@ private:
         runProcess({helper_, QStringLiteral("--manage-autostart"), QStringLiteral("--user"), user_,
                     QStringLiteral("--disable-entries"), disableIds.join(QLatin1Char(',')),
                     QStringLiteral("--enable-entries"), enableIds.join(QLatin1Char(','))},
-                   [this, containerPaths](int code, const QByteArray &output) {
+                   [this, cleanupIds](int code, const QByteArray &output) {
             appendActionResult(t().autostartOptimization, code, output);
-            runSelectedContainerCleanup(containerPaths);
+            runSelectedContainerCleanup(cleanupIds);
         });
     }
 
-    void runSelectedContainerCleanup(const QStringList &paths)
+    void runSelectedContainerCleanup(const QStringList &ids)
     {
-        if (paths.isEmpty()) {
+        if (ids.isEmpty()) {
             finishSelectedOptimization();
             return;
         }
-        QStringList command{QStringLiteral("pkexec"), helper_, QStringLiteral("--apply-old-containers")};
-        for (const QString &path : paths) {
-            command << QStringLiteral("--container") << path;
+        QStringList command{QStringLiteral("pkexec"), helper_, QStringLiteral("--apply-cleanup-candidates")};
+        for (const QString &id : ids) {
+            command << QStringLiteral("--cleanup-id") << id;
         }
         addPlanRow(t().containerCleanup, t().running, language_->currentData().toString() == QStringLiteral("en")
-            ? QStringLiteral("Move %1 selected old containers to DATA rollback quarantine.").arg(paths.size())
-            : QStringLiteral("移动 %1 个选中的旧容器到 DATA 回滚隔离区。").arg(paths.size()));
+            ? QStringLiteral("Move %1 selected cleanup items to DATA rollback quarantine.").arg(ids.size())
+            : QStringLiteral("移动 %1 个选中的清理项到 DATA 回滚隔离区。").arg(ids.size()));
         runProcess(command, [this](int code, const QByteArray &output) {
             appendActionResult(t().containerCleanup, code, output);
             finishSelectedOptimization();

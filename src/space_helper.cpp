@@ -28,7 +28,7 @@ struct AutostartEntry {
 
 static const QString kKaimingRoot = QStringLiteral("/var/opt/kaiming");
 static const QString kQuarantineRoot =
-    QStringLiteral("/data/usershare/kylinos-system-rollbacks/storage/kaiming-old-containers");
+    QStringLiteral("/data/usershare/kylinos-system-rollbacks/storage/kylin-space-guard-cleanup");
 
 static QString runCapture(const QString &program, const QStringList &args, int *exitCode = nullptr)
 {
@@ -142,6 +142,24 @@ static QString normalizeKaimingLayerPath(QString path)
     return path;
 }
 
+static QString normalizeRuntimePath(QString path)
+{
+    if (path.startsWith(QStringLiteral("/opt/kare-applications/"))) {
+        path.replace(QStringLiteral("/opt/kare-applications/"), QStringLiteral("/var/opt/kare-applications/"));
+    }
+    if (path.startsWith(QStringLiteral("/opt/kaiming/"))) {
+        path.replace(QStringLiteral("/opt/kaiming/"), QStringLiteral("/var/opt/kaiming/"));
+    }
+    return path;
+}
+
+static bool pathUnder(const QString &path, const QString &root)
+{
+    const QString cleanPath = QDir::cleanPath(path);
+    const QString cleanRoot = QDir::cleanPath(root);
+    return cleanPath == cleanRoot || cleanPath.startsWith(cleanRoot + QLatin1Char('/'));
+}
+
 static QSet<QString> currentLayerPaths()
 {
     QSet<QString> paths;
@@ -217,6 +235,167 @@ static QJsonArray oldContainerCandidates()
         array.append(item);
     }
     return array;
+}
+
+static QStringList activeOverlayPaths()
+{
+    int code = 0;
+    const QString output = runCapture(QStringLiteral("findmnt"),
+                                      {QStringLiteral("-t"), QStringLiteral("overlay"),
+                                       QStringLiteral("-o"), QStringLiteral("OPTIONS"), QStringLiteral("-n")},
+                                      &code);
+    QStringList paths;
+    const QRegularExpression optionRe(QStringLiteral("(?:upperdir|workdir)=([^,]+)"));
+    auto it = optionRe.globalMatch(output);
+    while (it.hasNext()) {
+        paths << normalizeRuntimePath(it.next().captured(1).trimmed());
+    }
+    paths.removeDuplicates();
+    return paths;
+}
+
+static bool runtimePathActive(const QString &path, const QStringList &activePaths)
+{
+    const QString normalized = normalizeRuntimePath(path);
+    for (const QString &active : activePaths) {
+        if (pathUnder(normalized, active) || pathUnder(active, normalized)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static QString cleanupKindZh(const QString &kind)
+{
+    if (kind == QStringLiteral("kaiming-old-layer")) {
+        return QStringLiteral("Kaiming 旧版本文件");
+    }
+    if (kind == QStringLiteral("kare-cache")) {
+        return QStringLiteral("KARE 缓存文件");
+    }
+    if (kind == QStringLiteral("kare-temp")) {
+        return QStringLiteral("KARE 临时文件");
+    }
+    if (kind == QStringLiteral("kare-log")) {
+        return QStringLiteral("KARE 日志文件");
+    }
+    return kind;
+}
+
+static QString cleanupKindEn(const QString &kind)
+{
+    if (kind == QStringLiteral("kaiming-old-layer")) {
+        return QStringLiteral("Kaiming old version files");
+    }
+    if (kind == QStringLiteral("kare-cache")) {
+        return QStringLiteral("KARE cache files");
+    }
+    if (kind == QStringLiteral("kare-temp")) {
+        return QStringLiteral("KARE temporary files");
+    }
+    if (kind == QStringLiteral("kare-log")) {
+        return QStringLiteral("KARE log files");
+    }
+    return kind;
+}
+
+static QJsonObject makeCleanupCandidate(const QString &id,
+                                        const QString &subsystem,
+                                        const QString &kind,
+                                        const QString &scope,
+                                        const QString &path,
+                                        qint64 bytes,
+                                        bool cleanable,
+                                        bool inUse,
+                                        const QString &reasonZh,
+                                        const QString &reasonEn)
+{
+    QJsonObject item;
+    item.insert(QStringLiteral("id"), id);
+    item.insert(QStringLiteral("subsystem"), subsystem);
+    item.insert(QStringLiteral("kind"), kind);
+    item.insert(QStringLiteral("kindZh"), cleanupKindZh(kind));
+    item.insert(QStringLiteral("kindEn"), cleanupKindEn(kind));
+    item.insert(QStringLiteral("scope"), scope);
+    item.insert(QStringLiteral("path"), path);
+    item.insert(QStringLiteral("bytes"), QString::number(bytes));
+    item.insert(QStringLiteral("cleanable"), cleanable);
+    item.insert(QStringLiteral("inUse"), inUse);
+    item.insert(QStringLiteral("reasonZh"), reasonZh);
+    item.insert(QStringLiteral("reasonEn"), reasonEn);
+    return item;
+}
+
+static QJsonArray cleanupCandidates()
+{
+    QJsonArray result;
+    const QJsonArray oldLayers = oldContainerCandidates();
+    for (const QJsonValue &value : oldLayers) {
+        const QJsonObject old = value.toObject();
+        const bool inUse = old.value(QStringLiteral("inUse")).toBool();
+        const QString ref = old.value(QStringLiteral("ref")).toString();
+        const QString module = old.value(QStringLiteral("module")).toString();
+        const QString version = old.value(QStringLiteral("version")).toString();
+        result.append(makeCleanupCandidate(old.value(QStringLiteral("path")).toString(),
+                                           QStringLiteral("kaiming"),
+                                           QStringLiteral("kaiming-old-layer"),
+                                           QStringLiteral("%1 / %2 / %3").arg(ref, module, version),
+                                           old.value(QStringLiteral("path")).toString(),
+                                           old.value(QStringLiteral("bytes")).toString().toLongLong(),
+                                           !inUse,
+                                           inUse,
+                                           inUse
+                                               ? QStringLiteral("旧版本层仍被挂载或进程使用，暂不自动清理。")
+                                               : QStringLiteral("不在当前 Kaiming 版本清单中，可移动到 DATA 回滚隔离区。"),
+                                           inUse
+                                               ? QStringLiteral("The old layer is still mounted or used by a process.")
+                                               : QStringLiteral("Not listed by the current Kaiming version set; can be moved to rollback quarantine.")));
+    }
+
+    const QStringList activePaths = activeOverlayPaths();
+    const QDir kareRoot(QStringLiteral("/var/opt/kare-applications"));
+    const QStringList profiles = kareRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    const QList<QPair<QString, QString>> relativeTargets{
+        {QStringLiteral("upper/var/cache"), QStringLiteral("kare-cache")},
+        {QStringLiteral("upper/var/tmp"), QStringLiteral("kare-temp")},
+        {QStringLiteral("upper/tmp"), QStringLiteral("kare-temp")},
+        {QStringLiteral("upper/root/.cache"), QStringLiteral("kare-cache")},
+        {QStringLiteral("upper/var/log"), QStringLiteral("kare-log")}
+    };
+    for (const QString &profile : profiles) {
+        const QString profileRoot = kareRoot.absoluteFilePath(profile);
+        if (!QFileInfo(profileRoot + QStringLiteral("/upper")).isDir()) {
+            continue;
+        }
+        const bool active = runtimePathActive(profileRoot + QStringLiteral("/upper"), activePaths)
+            || runtimePathActive(profileRoot + QStringLiteral("/work"), activePaths);
+        for (const auto &target : relativeTargets) {
+            const QString path = profileRoot + QLatin1Char('/') + target.first;
+            if (!QFileInfo(path).isDir()) {
+                continue;
+            }
+            const qint64 bytes = duBytes(path);
+            if (bytes <= 0) {
+                continue;
+            }
+            const bool cleanable = !active;
+            result.append(makeCleanupCandidate(path,
+                                               QStringLiteral("kare"),
+                                               target.second,
+                                               profile,
+                                               path,
+                                               bytes,
+                                               cleanable,
+                                               active,
+                                               active
+                                                   ? QStringLiteral("该 KARE 写入层正在挂载使用，只统计占用，暂不自动清理。")
+                                                   : QStringLiteral("该 KARE 写入层当前未挂载，缓存/临时数据可移动到 DATA 回滚隔离区。"),
+                                               active
+                                                   ? QStringLiteral("This KARE writable layer is currently mounted; it is shown for visibility only.")
+                                                   : QStringLiteral("This KARE writable layer is not mounted; cache or temporary data can be moved to rollback quarantine.")));
+        }
+    }
+    return result;
 }
 
 static QJsonArray applicationContainers()
@@ -428,6 +607,7 @@ static QJsonObject scan(const QString &user)
     metrics.insert(QStringLiteral("system_other"), QString::number(systemOther));
     root.insert(QStringLiteral("metrics"), metrics);
     root.insert(QStringLiteral("oldContainers"), oldContainersFuture.get());
+    root.insert(QStringLiteral("cleanupCandidates"), cleanupCandidates());
     root.insert(QStringLiteral("autostarts"), autostartsFuture.get());
     root.insert(QStringLiteral("applications"), applicationContainers());
     root.insert(QStringLiteral("mode"), runCapture(QStringLiteral("mm-cli"), {QStringLiteral("-s")}).trimmed());
@@ -513,7 +693,7 @@ static bool requireMaintainMode(QString *message)
     if (QCoreApplication::applicationPid() <= 0) {
         return false;
     }
-    if (qEnvironmentVariableIntValue("EUID") != 0 && ::getuid() != 0) {
+    if (::getuid() != 0) {
         *message = QStringLiteral("root privileges required");
         return false;
     }
@@ -584,6 +764,98 @@ static int applyOldContainers(const QStringList &paths)
     return 0;
 }
 
+static QString quarantinePathFor(const QString &stamp, const QString &sourcePath)
+{
+    QString rootName = QStringLiteral("system");
+    QString rel = QDir::cleanPath(sourcePath);
+    if (rel.startsWith(QStringLiteral("/var/opt/kaiming/"))) {
+        rootName = QStringLiteral("kaiming");
+        rel = rel.mid(QStringLiteral("/var/opt/kaiming/").size());
+    } else if (rel.startsWith(QStringLiteral("/var/opt/kare-applications/"))) {
+        rootName = QStringLiteral("kare");
+        rel = rel.mid(QStringLiteral("/var/opt/kare-applications/").size());
+    } else if (rel.startsWith(QLatin1Char('/'))) {
+        rel = rel.mid(1);
+    }
+    return kQuarantineRoot + QLatin1Char('/') + stamp + QLatin1Char('/') + rootName + QLatin1Char('/') + rel;
+}
+
+static QMap<QString, QJsonObject> cleanupCandidateMap()
+{
+    QMap<QString, QJsonObject> map;
+    const QJsonArray candidates = cleanupCandidates();
+    for (const QJsonValue &value : candidates) {
+        const QJsonObject item = value.toObject();
+        map.insert(item.value(QStringLiteral("id")).toString(), item);
+    }
+    return map;
+}
+
+static int applyCleanupCandidates(const QStringList &ids)
+{
+    QString message;
+    if (!requireMaintainMode(&message)) {
+        QJsonObject root;
+        root.insert(QStringLiteral("ok"), false);
+        root.insert(QStringLiteral("message"), message);
+        QTextStream(stdout) << QJsonDocument(root).toJson(QJsonDocument::Compact) << Qt::endl;
+        return 2;
+    }
+
+    const QMap<QString, QJsonObject> candidates = cleanupCandidateMap();
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-hhmmss"));
+    QJsonArray results;
+    for (const QString &id : ids) {
+        QJsonObject item;
+        item.insert(QStringLiteral("id"), id);
+        if (!candidates.contains(id)) {
+            item.insert(QStringLiteral("ok"), false);
+            item.insert(QStringLiteral("message"), QStringLiteral("cleanup candidate is no longer available"));
+            results.append(item);
+            continue;
+        }
+
+        const QJsonObject candidate = candidates.value(id);
+        const QString path = candidate.value(QStringLiteral("path")).toString();
+        item.insert(QStringLiteral("path"), path);
+        item.insert(QStringLiteral("kind"), candidate.value(QStringLiteral("kind")).toString());
+        if (!candidate.value(QStringLiteral("cleanable")).toBool()) {
+            item.insert(QStringLiteral("ok"), false);
+            item.insert(QStringLiteral("message"), QStringLiteral("candidate is not cleanable in current scan"));
+            results.append(item);
+            continue;
+        }
+        if (!QFileInfo(path).exists()) {
+            item.insert(QStringLiteral("ok"), false);
+            item.insert(QStringLiteral("message"), QStringLiteral("path no longer exists"));
+            results.append(item);
+            continue;
+        }
+        if (pathInUse(path) || runtimePathActive(path, activeOverlayPaths())) {
+            item.insert(QStringLiteral("ok"), false);
+            item.insert(QStringLiteral("message"), QStringLiteral("path is mounted or in use"));
+            results.append(item);
+            continue;
+        }
+
+        const qint64 bytes = duBytes(path);
+        const QString dest = quarantinePathFor(stamp, path);
+        QDir().mkpath(QFileInfo(dest).absolutePath());
+        int code = 0;
+        const QString output = runCapture(QStringLiteral("mv"), {path, dest}, &code);
+        item.insert(QStringLiteral("ok"), code == 0);
+        item.insert(QStringLiteral("bytes"), QString::number(code == 0 ? bytes : 0));
+        item.insert(QStringLiteral("dest"), dest);
+        item.insert(QStringLiteral("message"), code == 0 ? QStringLiteral("moved to rollback quarantine") : output);
+        results.append(item);
+    }
+    QJsonObject root;
+    root.insert(QStringLiteral("action"), QStringLiteral("applyCleanupCandidates"));
+    root.insert(QStringLiteral("results"), results);
+    QTextStream(stdout) << QJsonDocument(root).toJson(QJsonDocument::Compact) << Qt::endl;
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -593,10 +865,12 @@ int main(int argc, char **argv)
     QStringList disableEntries;
     QStringList enableEntries;
     QStringList containers;
+    QStringList cleanupIds;
     bool doScan = args.contains(QStringLiteral("--scan"));
     bool doAutostart = args.contains(QStringLiteral("--apply-autostart"));
     bool doManageAutostart = args.contains(QStringLiteral("--manage-autostart"));
     bool doContainers = args.contains(QStringLiteral("--apply-old-containers"));
+    bool doCleanupCandidates = args.contains(QStringLiteral("--apply-cleanup-candidates"));
 
     for (int i = 1; i < args.size(); ++i) {
         if (args.at(i) == QStringLiteral("--user") && i + 1 < args.size()) {
@@ -609,6 +883,8 @@ int main(int argc, char **argv)
             enableEntries = args.at(++i).split(QLatin1Char(','), Qt::SkipEmptyParts);
         } else if (args.at(i) == QStringLiteral("--container") && i + 1 < args.size()) {
             containers << args.at(++i);
+        } else if (args.at(i) == QStringLiteral("--cleanup-id") && i + 1 < args.size()) {
+            cleanupIds << args.at(++i);
         }
     }
 
@@ -620,6 +896,9 @@ int main(int argc, char **argv)
     }
     if (doContainers) {
         return applyOldContainers(containers);
+    }
+    if (doCleanupCandidates) {
+        return applyCleanupCandidates(cleanupIds);
     }
     if (!doScan && !doAutostart && !doManageAutostart && !doContainers) {
         doScan = true;

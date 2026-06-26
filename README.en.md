@@ -8,7 +8,7 @@ KylinOS V11 Desktop Space Cleaner is a desktop space analysis and conservative c
 
 - Show root filesystem usage with Kaiming, KARE, ostree writable layers, app usage, system cache, and other categories.
 - Show Kaiming application container statistics and per-application container details.
-- Detect old Kaiming container versions and move safe candidates to a DATA rollback quarantine.
+- Detect targeted KARE/Kaiming runtime cleanup candidates, including old Kaiming layers and cache or temporary data from inactive KARE writable layers, then move safe candidates to a DATA rollback quarantine.
 - Manage autostart entries, including disabling enabled entries and restoring entries previously disabled by the tool.
 - Show scan progress, execution plans, operation results, and failure log paths.
 
@@ -18,9 +18,10 @@ The tool is intentionally conservative:
 
 - It does not delete `/ostree`, `/sysroot/ostree`, EFI files, GRUB configuration, loader entries, `/etc/fstab`, or partition tables.
 - It does not present cleanup as application uninstall.
-- It does not silently remove currently used container layers.
+- It does not silently remove currently used Kaiming layers or mounted KARE writable layers.
 - System-level changes are executed through `pkexec` and follow Kylin maintain-mode requirements.
-- Old-container cleanup moves candidates into a rollback quarantine instead of permanently deleting them directly.
+- Cleanup candidates are moved into a rollback quarantine instead of permanently deleted directly.
+- The Kaiming repo object store and application state directories are currently shown for visibility only; they are not auto-deleted without an official tool or stricter reference validation.
 
 ## Build
 
