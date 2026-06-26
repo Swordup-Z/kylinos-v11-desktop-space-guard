@@ -446,7 +446,8 @@ protected:
         } else if (objectName() == QStringLiteral("BottomActionBar")) {
             background = mixedColor(QColor(255, 255, 255, 24), QColor(255, 255, 255, 38), hover_);
             border = mixedColor(borderBase, borderHover, hover_);
-        } else if (objectName() == QStringLiteral("OptimizationTaskRow") || objectName() == QStringLiteral("AutostartActionRow")) {
+        } else if (objectName() == QStringLiteral("OptimizationTaskRow") || objectName() == QStringLiteral("AutostartActionRow")
+                   || objectName() == QStringLiteral("RuntimeInsightRow")) {
             background = mixedColor(glassRow, glassRowHover, hover_);
             border = mixedColor(borderBase, borderHover, hover_);
         } else if (objectName() == QStringLiteral("TotalMetricRow")) {
@@ -1995,20 +1996,32 @@ private:
         auto *summaryCard = new CardFrame;
         summaryCard->setObjectName(QStringLiteral("SmartSummaryCard"));
         summaryCard->setInteractive(false);
-        summaryCard->setMinimumWidth(300);
-        summaryCard->setMaximumWidth(360);
+        summaryCard->setMinimumWidth(360);
+        summaryCard->setMaximumWidth(430);
         resultSummaryCard_ = summaryCard;
         auto *summaryLayout = new QVBoxLayout(summaryCard);
-        summaryLayout->setContentsMargins(16, 14, 16, 16);
-        summaryLayout->setSpacing(10);
+        summaryLayout->setContentsMargins(18, 16, 18, 16);
+        summaryLayout->setSpacing(12);
+        auto *resultSummaryBlock = new QFrame;
+        resultSummaryBlock->setObjectName(QStringLiteral("ResultSummaryBlock"));
+        auto *resultSummaryBlockLayout = new QVBoxLayout(resultSummaryBlock);
+        resultSummaryBlockLayout->setContentsMargins(14, 12, 14, 12);
+        resultSummaryBlockLayout->setSpacing(6);
         resultSummary_ = new QLabel;
-        resultSummary_->setObjectName(QStringLiteral("Intro"));
+        resultSummary_->setObjectName(QStringLiteral("ResultSummaryText"));
         resultSummary_->setWordWrap(true);
-        summaryLayout->addWidget(resultSummary_);
+        resultSummaryBlockLayout->addWidget(resultSummary_);
+        summaryLayout->addWidget(resultSummaryBlock);
+        auto *selectionSummaryBlock = new QFrame;
+        selectionSummaryBlock->setObjectName(QStringLiteral("ResultSummaryBlock"));
+        auto *selectionSummaryBlockLayout = new QVBoxLayout(selectionSummaryBlock);
+        selectionSummaryBlockLayout->setContentsMargins(14, 12, 14, 12);
+        selectionSummaryBlockLayout->setSpacing(6);
         selectionSummary_ = new QLabel;
-        selectionSummary_->setObjectName(QStringLiteral("Intro"));
+        selectionSummary_->setObjectName(QStringLiteral("ResultHintText"));
         selectionSummary_->setWordWrap(true);
-        summaryLayout->addWidget(selectionSummary_);
+        selectionSummaryBlockLayout->addWidget(selectionSummary_);
+        summaryLayout->addWidget(selectionSummaryBlock);
         auto *selectionButtons = new QHBoxLayout;
         selectionButtons->setSpacing(8);
         selectAllButton_ = new QPushButton;
@@ -2035,7 +2048,6 @@ private:
         resultActions->addWidget(applyOptimizationsButton_);
         resultActions->addWidget(rescanButton_);
         summaryLayout->addLayout(resultActions);
-        summaryLayout->addStretch(1);
         resultContent->addWidget(summaryCard);
 
         auto *optimizationScroll = createCardList(&optimizationRows_, 330);
@@ -2189,6 +2201,48 @@ private:
             QLabel#Title { color: #ffffff; letter-spacing: 0px; }
             QFrame#TopBarFrame QLabel { color: #f7edff; }
             QLabel#Intro { color: #d6c9e8; font-size: 14px; line-height: 150%; }
+            QFrame#ResultSummaryBlock {
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.10);
+            }
+            QLabel#ResultSummaryText {
+                color: #ffffff;
+                font-size: 16px;
+                font-weight: 820;
+                line-height: 155%;
+            }
+            QLabel#ResultHintText {
+                color: #f3e8ff;
+                font-size: 15px;
+                font-weight: 720;
+                line-height: 155%;
+            }
+            QFrame#RuntimeInsightRow {
+                min-height: 154px;
+            }
+            QFrame#RuntimeInsightRow QLabel#InsightTitle {
+                color: #ffffff;
+                font-size: 20px;
+                font-weight: 900;
+            }
+            QFrame#RuntimeInsightRow QLabel#InsightBody {
+                color: #f3e8ff;
+                font-size: 16px;
+                font-weight: 740;
+                line-height: 158%;
+            }
+            QFrame#RuntimeInsightRow QFrame#ValuePill {
+                min-height: 64px;
+            }
+            QFrame#RuntimeInsightRow QLabel#PillLabel {
+                font-size: 12px;
+                font-weight: 820;
+            }
+            QFrame#RuntimeInsightRow QLabel#PillValue {
+                font-size: 18px;
+                font-weight: 900;
+            }
             QFrame#StatusFrame {
                 border: 1px solid rgba(255, 255, 255, 0.16);
                 border-radius: 8px;
@@ -2425,8 +2479,15 @@ private:
                 border-color: rgba(255, 255, 255, 0.22);
             }
             QCheckBox#TaskCheckBox {
-                font-size: 14px;
+                font-size: 15px;
                 font-weight: 800;
+            }
+            QFrame#OptimizationTaskRow {
+                min-height: 96px;
+            }
+            QFrame#OptimizationTaskRow QLabel#PathValue {
+                font-size: 13px;
+                line-height: 145%;
             }
             QPushButton#TaskDetailButton {
                 min-height: 40px;
@@ -2950,6 +3011,50 @@ private:
         return row;
     }
 
+    ClickableCardFrame *createRuntimeInsightRow(int selectableCount, qint64 selectableBytes, int inUseCount)
+    {
+        auto *row = new ClickableCardFrame;
+        row->setObjectName(QStringLiteral("RuntimeInsightRow"));
+        row->setInteractive(false);
+        row->setCursor(Qt::ArrowCursor);
+        row->setMinimumHeight(154);
+
+        auto *layout = new QVBoxLayout(row);
+        layout->setContentsMargins(20, 16, 20, 18);
+        layout->setSpacing(14);
+
+        const bool english = language_->currentData().toString() == QStringLiteral("en");
+        auto *title = makeLabel(english
+                                    ? QStringLiteral("Cleanup result")
+                                    : QStringLiteral("清理结果说明"),
+                                QStringLiteral("InsightTitle"));
+        layout->addWidget(title);
+
+        auto *body = makeLabel(english
+                                   ? QStringLiteral("Safe items will be moved to the DATA rollback quarantine. Mounted KARE writable layers and current Kaiming files are shown only for visibility.")
+                                   : QStringLiteral("可安全处理的项目会移动到 DATA 回滚隔离区；正在挂载的 KARE 写入层和当前 Kaiming 文件只展示占用，不会自动清理。"),
+                               QStringLiteral("InsightBody"));
+        body->setWordWrap(true);
+        layout->addWidget(body);
+
+        auto *pillLayout = new QHBoxLayout;
+        pillLayout->setSpacing(12);
+        pillLayout->addWidget(createValuePill(english ? QStringLiteral("Safe items") : QStringLiteral("可清理项"),
+                                              QString::number(selectableCount),
+                                              true),
+                              1);
+        pillLayout->addWidget(createValuePill(english ? QStringLiteral("Rollback size") : QStringLiteral("隔离释放"),
+                                              fmtBytes(selectableBytes),
+                                              true),
+                              1);
+        pillLayout->addWidget(createValuePill(english ? QStringLiteral("In use") : QStringLiteral("正在使用"),
+                                              QString::number(inUseCount),
+                                              true),
+                              1);
+        layout->addLayout(pillLayout);
+        return row;
+    }
+
     ClickableCardFrame *createAppSummaryRow(const QString &title,
                                             const QStringList &labels,
                                             const QStringList &values)
@@ -3213,7 +3318,71 @@ private:
         return row;
     }
 
-    ClickableCardFrame *createOptimizationRow(QCheckBox *box, const QString &title, const QString &detail, const QString &size)
+    CardFrame *createCleanupCandidateDetailCard(const QJsonObject &item)
+    {
+        auto *row = new CardFrame;
+        row->setObjectName(QStringLiteral("ContainerRow"));
+        row->setInteractive(false);
+        row->setMinimumHeight(260);
+        auto *layout = new QVBoxLayout(row);
+        layout->setContentsMargins(18, 14, 18, 14);
+        layout->setSpacing(12);
+
+        const bool english = language_->currentData().toString() == QStringLiteral("en");
+        const QString title = QStringLiteral("%1 · %2").arg(english
+                                                                 ? item.value(QStringLiteral("kindEn")).toString()
+                                                                 : item.value(QStringLiteral("kindZh")).toString(),
+                                                             item.value(QStringLiteral("scope")).toString());
+        layout->addWidget(makeLabel(title, QStringLiteral("ContainerTitle")));
+
+        auto *firstRow = new QHBoxLayout;
+        firstRow->setSpacing(10);
+        firstRow->addWidget(createValuePill(english ? QStringLiteral("Type") : QStringLiteral("信息类型"),
+                                            english ? item.value(QStringLiteral("kindEn")).toString()
+                                                    : item.value(QStringLiteral("kindZh")).toString(),
+                                            true),
+                            1);
+        firstRow->addWidget(createValuePill(t().appSize,
+                                            fmtBytes(jsonInt64(item, QStringLiteral("bytes"))),
+                                            true),
+                            1);
+        firstRow->addWidget(createValuePill(t().status,
+                                            item.value(QStringLiteral("cleanable")).toBool()
+                                                ? (english ? QStringLiteral("Cleanable") : QStringLiteral("可清理"))
+                                                : (english ? QStringLiteral("In use") : QStringLiteral("正在使用")),
+                                            true),
+                            1);
+        layout->addLayout(firstRow);
+
+        auto *reasonFrame = new QFrame;
+        reasonFrame->setObjectName(QStringLiteral("PathPill"));
+        auto *reasonLayout = new QVBoxLayout(reasonFrame);
+        reasonLayout->setContentsMargins(12, 8, 12, 8);
+        reasonLayout->setSpacing(5);
+        reasonLayout->addWidget(makeLabel(english ? QStringLiteral("Result explanation") : QStringLiteral("结果说明"),
+                                          QStringLiteral("PillLabel")));
+        reasonLayout->addWidget(makeLabel(english
+                                              ? item.value(QStringLiteral("reasonEn")).toString()
+                                              : item.value(QStringLiteral("reasonZh")).toString(),
+                                          QStringLiteral("PathValue")));
+        layout->addWidget(reasonFrame);
+
+        auto *pathFrame = new QFrame;
+        pathFrame->setObjectName(QStringLiteral("PathPill"));
+        auto *pathLayout = new QVBoxLayout(pathFrame);
+        pathLayout->setContentsMargins(12, 8, 12, 8);
+        pathLayout->setSpacing(5);
+        pathLayout->addWidget(makeLabel(t().path, QStringLiteral("PillLabel")));
+        pathLayout->addWidget(makeLabel(item.value(QStringLiteral("path")).toString(), QStringLiteral("PathValue")));
+        layout->addWidget(pathFrame);
+        return row;
+    }
+
+    ClickableCardFrame *createOptimizationRow(QCheckBox *box,
+                                              const QString &title,
+                                              const QString &detail,
+                                              const QString &size,
+                                              const std::function<void()> &showDetails)
     {
         auto *row = new ClickableCardFrame;
         row->setObjectName(QStringLiteral("OptimizationTaskRow"));
@@ -3232,32 +3401,25 @@ private:
         auto *main = new QVBoxLayout;
         main->setSpacing(8);
         main->addWidget(box);
-        auto *detailLabel = makeLabel(detail, QStringLiteral("PathValue"));
-        main->addWidget(detailLabel);
         layout->addLayout(main, 4);
 
-        auto *side = new QVBoxLayout;
-        side->setSpacing(8);
+        auto *side = new QHBoxLayout;
+        side->setSpacing(10);
         if (!size.isEmpty()) {
-            side->addWidget(createValuePill(t().appSize, size));
+            auto *sizePill = createValuePill(t().appSize, size);
+            sizePill->setFixedWidth(kAutostartDetailButtonWidth);
+            sizePill->setFixedHeight(kAutostartRowControlHeight);
+            side->addWidget(sizePill, 0, Qt::AlignVCenter);
         }
         const QString detailText = language_->currentData().toString() == QStringLiteral("en")
             ? QStringLiteral("Details")
             : QStringLiteral("详情");
         auto *detailButton = new QPushButton(detailText);
         detailButton->setObjectName(QStringLiteral("TaskDetailButton"));
-        applyButtonMetrics(detailButton, kCompactButtonWidth);
-        side->addWidget(detailButton);
-        side->addStretch(1);
-        layout->addLayout(side, 1);
+        applyButtonMetrics(detailButton, kAutostartDetailButtonWidth, true, kAutostartRowControlHeight);
+        side->addWidget(detailButton, 0, Qt::AlignVCenter);
+        layout->addLayout(side, 0);
 
-        auto showDetails = [this, title, detail, size]() {
-            const QString body = size.isEmpty() ? detail : detail + QStringLiteral("\n\n") + t().appSize + QStringLiteral(" ") + size;
-            QMessageBox box(QMessageBox::Information, title, body, QMessageBox::NoButton, this);
-            box.setStyleSheet(styleSheet());
-            box.addButton(t().ok, QMessageBox::AcceptRole);
-            box.exec();
-        };
         connect(detailButton, &QPushButton::clicked, this, showDetails);
         connect(row, &ClickableCardFrame::clicked, this, [box]() {
             if (box->isEnabled()) {
@@ -3892,6 +4054,9 @@ private:
                                                          QStringLiteral("%1 / %2").arg(selectableContainers).arg(fmtBytes(selectableBytes)),
                                                          QString::number(inUseContainers)}));
             }
+            if (activeReviewFilter_ == 1) {
+                addOptimizationCard(createRuntimeInsightRow(selectableContainers, selectableBytes, inUseContainers));
+            }
             addOptimizationCard(createLargeNavigationButtonRow(language_->currentData().toString() == QStringLiteral("en")
                                                                    ? QStringLiteral("Open KARE/Kaiming list")
                                                                    : QStringLiteral("进入 KARE/Kaiming 列表"),
@@ -4014,7 +4179,8 @@ private:
             addOptimizationCard(createOptimizationRow(box,
                                                       title,
                                                       detail,
-                                                      fmtBytes(jsonInt64(item, QStringLiteral("bytes")))));
+                                                      fmtBytes(jsonInt64(item, QStringLiteral("bytes"))),
+                                                      [this, item]() { showCleanupCandidateDetailPage(item); }));
             resultContainerBoxes_.append({item.value(QStringLiteral("id")).toString(), box});
         }
 
@@ -4033,6 +4199,47 @@ private:
                 : QStringLiteral("在二级列表中选择要清理的 KARE/Kaiming 项目。"));
         }
         updateOptimizationSelectionState();
+        if (scanStack_) {
+            scanStack_->setCurrentIndex(2);
+            fadeIn(scanStack_->currentWidget());
+        }
+    }
+
+    void showCleanupCandidateDetailPage(const QJsonObject &item)
+    {
+        activeReviewPageMode_ = 3;
+        resultContainerBoxes_.clear();
+        resultAutostartRows_.clear();
+        clearRows(optimizationRows_);
+        secondarySelectAllButton_ = nullptr;
+        secondaryClearSelectionButton_ = nullptr;
+        secondaryApplyButton_ = nullptr;
+        clearSecondaryToolbar();
+        clearRows(planRows_);
+        setOptimizationActionControlsVisible(false);
+        if (resultSummaryCard_) {
+            resultSummaryCard_->hide();
+        }
+        if (secondaryToolbarHost_) {
+            secondaryToolbarHost_->hide();
+        }
+        if (optimizationScrollArea_) {
+            optimizationScrollArea_->setMinimumHeight(430);
+            optimizationScrollArea_->setMaximumHeight(QWIDGETSIZE_MAX);
+        }
+        if (resultTitle_) {
+            resultTitle_->setText(language_->currentData().toString() == QStringLiteral("en")
+                ? QStringLiteral("KARE/Kaiming Details")
+                : QStringLiteral("KARE/Kaiming 详情"));
+        }
+
+        addOptimizationCard(createFullWidthButtonRow(language_->currentData().toString() == QStringLiteral("en")
+                                                         ? QStringLiteral("Back to cleanup list")
+                                                         : QStringLiteral("返回清理列表"),
+                                                     [this]() { showContainerSelectionPage(); },
+                                                     QStyle::SP_ArrowBack));
+        addOptimizationCard(createCleanupCandidateDetailCard(item));
+
         if (scanStack_) {
             scanStack_->setCurrentIndex(2);
             fadeIn(scanStack_->currentWidget());
@@ -4223,7 +4430,8 @@ private:
             resultSummaryCard_->setVisible(!secondary);
         }
         if (optimizationScrollArea_) {
-            optimizationScrollArea_->setMinimumHeight(secondary ? 340 : 430);
+            optimizationScrollArea_->setMinimumHeight(secondary ? 240 : 430);
+            optimizationScrollArea_->setMaximumHeight(secondary ? 250 : QWIDGETSIZE_MAX);
         }
         if (secondaryToolbarHost_) {
             secondaryToolbarHost_->setVisible(secondary);
